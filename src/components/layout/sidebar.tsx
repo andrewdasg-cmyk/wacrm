@@ -10,6 +10,7 @@ import { useUnreadNotifications } from "@/hooks/use-unread-notifications";
 import {
   Bell,
   Bot,
+  ClipboardCheck,
   Crown,
   GitBranch,
   LayoutDashboard,
@@ -99,6 +100,7 @@ const navItems: NavItem[] = [
   { href: "/automations", labelKey: "automations", icon: Zap },
   { href: "/flows", labelKey: "flows", icon: Workflow, beta: true },
   { href: "/agents", labelKey: "aiAgents", icon: Bot },
+  { href: "/auditoria", labelKey: "agentAudit", icon: ClipboardCheck },
 ];
 
 const bottomNavItems = [
