@@ -70,15 +70,20 @@ const ESTADO: Record<string, { texto: string; clase: string }> = {
   vencido: { texto: "Vencido", clase: "bg-muted text-muted-foreground" },
 };
 
-const ETIQUETA_VARIABLE = [
-  "Saludo",
-  "Cliente",
-  "Oferta",
-  "Valor",
-  "Ciudad",
-  "Dirección",
-  "Pregunta",
-];
+// What each {{n}} is, per Meta template (Plantillas-Meta-API-v2.md). Only
+// used until the templates are synced into the CRM and the page can show
+// the full text instead.
+const ETIQUETAS: Record<string, string[]> = {
+  velio_confirmacion_pedido: ["Saludo", "Cliente", "Oferta", "Valor", "Ciudad", "Dirección"],
+  velio_confirmacion_dato: ["Saludo", "Cliente", "Oferta", "Valor", "Ciudad", "Dirección", "Pregunta"],
+  velio_confirmacion_retiro: ["Saludo", "Cliente", "Oferta", "Valor", "Ciudad", "Transportadora", "Oficina"],
+  velio_guia_generada: ["Saludo", "Cliente", "Producto", "Transportadora", "Guía", "Seguimiento", "Valor", "Despacho"],
+  velio_guia_primer_contacto: ["Saludo", "Cliente", "Oferta", "Valor", "Dirección", "Guía", "Transportadora", "Seguimiento", "Despacho"],
+  velio_llego_a_su_ciudad: ["Saludo", "Cliente", "Producto", "Ciudad", "Valor"],
+  velio_retiro_aviso: ["Saludo", "Cliente", "# pedido", "Producto", "Ciudad", "Transportadora"],
+  velio_en_reparto: ["Saludo", "Cliente", "Producto", "Valor"],
+  velio_retiro_en_camino: ["Saludo", "Cliente", "Producto", "Transportadora", "Ciudad", "Guía", "Seguimiento", "Valor"],
+};
 
 function texto(v: unknown): string {
   return typeof v === "string" ? v : v == null ? "" : String(v);
@@ -264,6 +269,7 @@ function Tarjeta({ caso, alCambiar }: { caso: Caso; alCambiar: () => void }) {
         <Fila etiqueta="Estado en Dropi" valor={ctx.estado_dropi} />
         <Fila etiqueta="Guía" valor={ctx.guia ? `${texto(ctx.guia)} (${texto(ctx.transportadora)})` : ""} />
         <Fila etiqueta="Sin plantilla" valor={ctx.sin_plantilla} />
+        <Fila etiqueta="Oficina" valor={ctx.oficina} />
       </div>
 
       <Historial h={ctx.historial_cliente} />
@@ -283,7 +289,11 @@ function Tarjeta({ caso, alCambiar }: { caso: Caso; alCambiar: () => void }) {
           ) : (
             <div className="space-y-1 rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3">
               {(caso.variables ?? []).map((v, i) => (
-                <Fila key={i} etiqueta={`{{${i + 1}}} ${ETIQUETA_VARIABLE[i] ?? ""}`} valor={v} />
+                <Fila
+                  key={i}
+                  etiqueta={`{{${i + 1}}} ${ETIQUETAS[caso.plantilla_meta ?? ""]?.[i] ?? ""}`}
+                  valor={v}
+                />
               ))}
               <p className="pt-1 text-xs text-muted-foreground">
                 Para ver el texto completo, sincroniza las plantillas desde Meta en Configuración.
