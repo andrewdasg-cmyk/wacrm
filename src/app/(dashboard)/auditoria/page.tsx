@@ -60,6 +60,7 @@ const TIPO: Record<string, string> = {
   recordatorio: "Recordatorio (2do mensaje)",
   llamar: "📞 Llamar",
   novedad: "🚚 Novedad",
+  carrito: "🛒 Carrito",
 };
 
 const ESTADO: Record<string, { texto: string; clase: string }> = {
@@ -84,6 +85,8 @@ const ETIQUETAS: Record<string, string[]> = {
   velio_recordatorio_confirmacion: ["Saludo", "Cliente", "Producto", "Valor", "Dirección"],
   velio_recordatorio_dato: ["Saludo", "Cliente", "Producto", "Lo que falta"],
   velio_novedad_entrega: ["Saludo", "Cliente", "Transportadora", "Producto", "Novedad"],
+  velio_carrito_pendiente: ["Saludo", "Cliente", "Producto", "Botón de la página", "Enlace"],
+  velio_carrito_primera_compra: ["Saludo", "Cliente", "Producto", "Botón de la página", "Enlace"],
   velio_guia_generada: ["Saludo", "Cliente", "Producto", "Transportadora", "Guía", "Seguimiento", "Valor", "Despacho"],
   velio_guia_primer_contacto: ["Saludo", "Cliente", "Oferta", "Valor", "Dirección", "Guía", "Transportadora", "Seguimiento", "Despacho"],
   velio_llego_a_su_ciudad: ["Saludo", "Cliente", "Producto", "Ciudad", "Valor"],
@@ -275,6 +278,7 @@ function Tarjeta({ caso, alCambiar }: { caso: Caso; alCambiar: () => void }) {
         <Fila etiqueta="Variante" valor={ctx.variante} />
         <Fila etiqueta="Estado en Dropi" valor={ctx.estado_dropi} />
         <Fila etiqueta="Novedad" valor={ctx.motivo_novedad} />
+        <Fila etiqueta="Carrito" valor={ctx.carrito} />
         <Fila etiqueta="Guion" valor={ctx.guion} />
         <Fila etiqueta="Guía" valor={ctx.guia ? `${texto(ctx.guia)} (${texto(ctx.transportadora)})` : ""} />
         <Fila etiqueta="Sin plantilla" valor={ctx.sin_plantilla} />
