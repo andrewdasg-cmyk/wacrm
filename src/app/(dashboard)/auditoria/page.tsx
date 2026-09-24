@@ -57,6 +57,8 @@ const TIPO: Record<string, string> = {
   confirmacion: "Confirmación",
   respuesta: "Respuesta del cliente",
   etapa: "Aviso ②③④",
+  recordatorio: "Recordatorio (2do mensaje)",
+  llamar: "📞 Llamar",
 };
 
 const ESTADO: Record<string, { texto: string; clase: string }> = {
@@ -78,6 +80,8 @@ const ETIQUETAS: Record<string, string[]> = {
   velio_confirmacion_pedido: ["Saludo", "Cliente", "Oferta", "Valor", "Ciudad", "Dirección"],
   velio_confirmacion_dato: ["Saludo", "Cliente", "Oferta", "Valor", "Ciudad", "Dirección", "Pregunta"],
   velio_confirmacion_retiro: ["Saludo", "Cliente", "Oferta", "Valor", "Ciudad", "Transportadora", "Oficina"],
+  velio_recordatorio_confirmacion: ["Saludo", "Cliente", "Producto", "Valor", "Dirección"],
+  velio_recordatorio_dato: ["Saludo", "Cliente", "Producto", "Lo que falta"],
   velio_guia_generada: ["Saludo", "Cliente", "Producto", "Transportadora", "Guía", "Seguimiento", "Valor", "Despacho"],
   velio_guia_primer_contacto: ["Saludo", "Cliente", "Oferta", "Valor", "Dirección", "Guía", "Transportadora", "Seguimiento", "Despacho"],
   velio_llego_a_su_ciudad: ["Saludo", "Cliente", "Producto", "Ciudad", "Valor"],
