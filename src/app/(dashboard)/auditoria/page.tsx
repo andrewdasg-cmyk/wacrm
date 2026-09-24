@@ -118,6 +118,63 @@ function Mensajes({ lista }: { lista: unknown }) {
   );
 }
 
+interface HistorialCliente {
+  texto?: string;
+  ultima_novedad?: string;
+  porcentaje?: number | null;
+  pedidos_nuestros?: {
+    pedido: string;
+    fecha: string;
+    lista: string;
+    estado: string;
+    novedad?: string;
+    notas?: string;
+  }[];
+}
+
+// Who Andrés is about to talk to. Dropi's cross-store history only gives
+// totals and the TYPE of the last incident; the carrier's own words are
+// only available for orders placed in our store.
+function Historial({ h }: { h: unknown }) {
+  const hist = (h ?? {}) as HistorialCliente;
+  const nuestros = hist.pedidos_nuestros ?? [];
+  if (!hist.texto && nuestros.length === 0) return null;
+  const riesgo = (hist.porcentaje ?? 0) >= 30;
+  return (
+    <div
+      className={cn(
+        "space-y-1.5 rounded-lg border p-3 text-sm",
+        riesgo ? "border-destructive/30 bg-destructive/5" : "border-border bg-muted/30",
+      )}
+    >
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        Historial del cliente
+      </p>
+      {hist.texto ? <p className="text-foreground">En Dropi (todas las tiendas): {hist.texto}</p> : null}
+      {hist.ultima_novedad ? (
+        <p className="text-foreground">
+          Última novedad: <span className="font-medium">{hist.ultima_novedad}</span>
+        </p>
+      ) : null}
+      {nuestros.length ? (
+        <div className="space-y-1 pt-1">
+          <p className="text-muted-foreground">Sus otros pedidos en nuestra tienda:</p>
+          {nuestros.map((p) => (
+            <p key={p.pedido} className="text-foreground">
+              • {p.fecha} · #{p.pedido} · {p.lista}
+              {p.estado && p.estado !== p.lista ? ` (${p.estado})` : ""}
+              {p.novedad ? ` — novedad: ${p.novedad}` : ""}
+              {p.notas ? ` — nota: ${p.notas}` : ""}
+            </p>
+          ))}
+        </div>
+      ) : (
+        <p className="text-muted-foreground">Es su primer pedido en nuestra tienda.</p>
+      )}
+    </div>
+  );
+}
+
 function Tarjeta({ caso, alCambiar }: { caso: Caso; alCambiar: () => void }) {
   const [nota, setNota] = useState("");
   const [abrirNota, setAbrirNota] = useState(false);
@@ -208,6 +265,8 @@ function Tarjeta({ caso, alCambiar }: { caso: Caso; alCambiar: () => void }) {
         <Fila etiqueta="Guía" valor={ctx.guia ? `${texto(ctx.guia)} (${texto(ctx.transportadora)})` : ""} />
         <Fila etiqueta="Sin plantilla" valor={ctx.sin_plantilla} />
       </div>
+
+      <Historial h={ctx.historial_cliente} />
 
       <Mensajes lista={ctx.mensajes} />
       {ctx.mensaje ? <Mensajes lista={[{ texto: ctx.mensaje, tipo: "text" }]} /> : null}
