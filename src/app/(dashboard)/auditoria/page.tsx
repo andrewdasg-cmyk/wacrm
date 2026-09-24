@@ -55,6 +55,7 @@ const TIPO: Record<string, string> = {
   primer_contacto: "Primer contacto",
   confirmacion: "Confirmación",
   respuesta: "Respuesta del cliente",
+  etapa: "Aviso ②③④",
 };
 
 const ESTADO: Record<string, { texto: string; clase: string }> = {
@@ -203,6 +204,9 @@ function Tarjeta({ caso, alCambiar }: { caso: Caso; alCambiar: () => void }) {
         />
         <Fila etiqueta="Historial" valor={ctx.historial} />
         <Fila etiqueta="Variante" valor={ctx.variante} />
+        <Fila etiqueta="Estado en Dropi" valor={ctx.estado_dropi} />
+        <Fila etiqueta="Guía" valor={ctx.guia ? `${texto(ctx.guia)} (${texto(ctx.transportadora)})` : ""} />
+        <Fila etiqueta="Sin plantilla" valor={ctx.sin_plantilla} />
       </div>
 
       <Mensajes lista={ctx.mensajes} />
