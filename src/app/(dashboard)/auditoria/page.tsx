@@ -17,6 +17,7 @@ import { useCallback, useEffect, useState } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
 import {
+  AlertTriangle,
   Check,
   ClipboardCheck,
   Loader2,
@@ -367,6 +368,91 @@ function Tarjeta({ caso, alCambiar }: { caso: Caso; alCambiar: () => void }) {
   );
 }
 
+interface EstadoAgente {
+  token_vence: string | null;
+  token_subido: string | null;
+  ultima_sync: string | null;
+  ultima_actividad: string | null;
+}
+
+// The agent can silently stop reading Dropi when the 12-hour token expires,
+// and nothing else would tell Andrés. So the queue says it, in red.
+function AvisoAgente() {
+  const [estado, setEstado] = useState<EstadoAgente | null>(null);
+  const [ahora, setAhora] = useState(() => Date.now());
+
+  useEffect(() => {
+    const cargar = () =>
+      fetch("/api/agente/estado", { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => {
+          setEstado(d);
+          setAhora(Date.now());
+        })
+        .catch(() => {});
+    cargar();
+    const t = setInterval(cargar, 60000);
+    return () => clearInterval(t);
+  }, []);
+
+  if (!estado) return null;
+  const hora = (iso: string) =>
+    new Date(iso).toLocaleString("es-CO", {
+      weekday: "short",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  const avisos: { grave: boolean; texto: string }[] = [];
+  const pasos = "Copia el token nuevo de Dropi al .env y da doble clic a «Actualizar token Dropi.bat».";
+
+  if (!estado.token_vence) {
+    avisos.push({ grave: false, texto: `No sé cuándo vence el token de Dropi. ${pasos}` });
+  } else {
+    const faltan = new Date(estado.token_vence).getTime() - ahora;
+    if (faltan <= 0) {
+      avisos.push({
+        grave: true,
+        texto: `El token de Dropi venció (${hora(estado.token_vence)}). El agente no está leyendo pedidos nuevos ni puede confirmar. ${pasos}`,
+      });
+    } else if (faltan < 2 * 3600 * 1000) {
+      avisos.push({
+        grave: false,
+        texto: `El token de Dropi vence pronto: ${hora(estado.token_vence)}. ${pasos}`,
+      });
+    }
+  }
+  if (estado.ultima_actividad && ahora - new Date(estado.ultima_actividad).getTime() > 15 * 60 * 1000) {
+    avisos.push({
+      grave: true,
+      texto: `El agente no da señales desde ${hora(estado.ultima_actividad)}. Revisa en Dokploy que velio-agente esté corriendo.`,
+    });
+  } else if (estado.ultima_sync && ahora - new Date(estado.ultima_sync).getTime() > 30 * 60 * 1000) {
+    avisos.push({
+      grave: true,
+      texto: `La última sincronización con Dropi fue ${hora(estado.ultima_sync)}. Casi siempre es el token.`,
+    });
+  }
+  if (!avisos.length) return null;
+  return (
+    <div className="space-y-2">
+      {avisos.map((a, i) => (
+        <div
+          key={i}
+          className={cn(
+            "flex items-start gap-2 rounded-lg border p-3 text-sm",
+            a.grave
+              ? "border-destructive/40 bg-destructive/10 text-destructive"
+              : "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+          )}
+        >
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{a.texto}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function AuditoriaPage() {
   const [vista, setVista] = useState<"abiertos" | "cerrados">("abiertos");
   const [casos, setCasos] = useState<Caso[] | null>(null);
@@ -430,6 +516,8 @@ export default function AuditoriaPage() {
           </Button>
         </div>
       </div>
+
+      <AvisoAgente />
 
       {error ? (
         <p className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{error}</p>
