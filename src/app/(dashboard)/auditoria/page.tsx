@@ -61,6 +61,8 @@ const TIPO: Record<string, string> = {
   llamar: "📞 Llamar",
   novedad: "🚚 Novedad",
   carrito: "🛒 Carrito",
+  carrito_verificar: "🛒 Tomar pedido: sus datos",
+  carrito_crear: "📦 Crear pedido desde carrito",
 };
 
 const ESTADO: Record<string, { texto: string; clase: string }> = {
