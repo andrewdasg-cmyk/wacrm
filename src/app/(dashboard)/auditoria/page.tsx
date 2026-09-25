@@ -467,12 +467,164 @@ function AvisoAgente() {
   );
 }
 
-export default function AuditoriaPage() {
-  const [vista, setVista] = useState<"abiertos" | "cerrados">("abiertos");
-  const [casos, setCasos] = useState<Caso[] | null>(null);
+interface PedidoPorConfirmar {
+  pedido: string;
+  cliente: string;
+  telefono: string;
+  ciudad: string;
+  direccion: string;
+  valor: number | null;
+  producto: string;
+  tienda: string;
+  fecha_pedido: string;
+  intencion: string | null;
+  etiqueta: string;
+  resumen: string;
+  pide: string[];
+  caso_estado: string | null;
+  le_respondimos: boolean;
+  ultimo_mensaje: string | null;
+  conversacion: string | null;
+  mensajes: { texto: string | null; tipo: string; media_url: string | null; fecha: string }[];
+}
+
+const COLOR_INTENCION: Record<string, string> = {
+  confirma: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-300",
+  cambio: "bg-amber-500/15 text-amber-600 dark:text-amber-300",
+  dato: "bg-amber-500/15 text-amber-600 dark:text-amber-300",
+  pregunta: "bg-sky-500/15 text-sky-600 dark:text-sky-300",
+  cancela: "bg-destructive/15 text-destructive",
+};
+
+// Orders the customer already answered in the chat but that are still
+// "Por confirmar" in Dropi: what Andrés has left to confirm or fix there.
+function PorConfirmar({ recarga }: { recarga: number }) {
+  const [pedidos, setPedidos] = useState<PedidoPorConfirmar[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    let vivo = true;
+    const cargar = () =>
+      fetch("/api/agente/por-confirmar", { cache: "no-store" })
+        .then(async (r) => {
+          const d = await r.json().catch(() => ({}));
+          if (!vivo) return;
+          if (!r.ok) setError(d.error ?? "No se pudo cargar la lista");
+          else {
+            setError(null);
+            setPedidos(d.pedidos ?? []);
+          }
+        })
+        .catch(() => vivo && setError("No se pudo cargar la lista"));
+    cargar();
+    const t = setInterval(cargar, 60000);
+    return () => {
+      vivo = false;
+      clearInterval(t);
+    };
+  }, [recarga]);
+
+  if (error) return <p className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{error}</p>;
+  if (pedidos === null)
+    return (
+      <div className="flex h-48 items-center justify-center">
+        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+      </div>
+    );
+  if (!pedidos.length)
+    return (
+      <div className="flex h-48 flex-col items-center justify-center rounded-xl border border-dashed border-border bg-muted/40">
+        <Check className="h-6 w-6 text-primary" />
+        <p className="mt-3 text-sm font-medium text-foreground">
+          Ningún cliente que ya respondió está esperando en Dropi
+        </p>
+      </div>
+    );
+
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-muted-foreground">
+        {pedidos.length} pedido{pedidos.length === 1 ? "" : "s"} siguen «Por confirmar» en Dropi y el cliente ya
+        respondió en el chat.
+      </p>
+      {pedidos.map((p) => (
+        <div key={p.pedido} className="space-y-2 rounded-xl border border-border bg-card p-4">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="font-semibold text-foreground">{p.cliente || p.telefono}</h2>
+                <span
+                  className={cn(
+                    "rounded-full px-2.5 py-0.5 text-xs font-medium",
+                    COLOR_INTENCION[p.intencion ?? ""] ?? "bg-muted text-muted-foreground",
+                  )}
+                >
+                  {p.etiqueta}
+                </span>
+                {p.tienda ? <Badge variant="secondary">{p.tienda}</Badge> : null}
+              </div>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Pedido {p.pedido} · {p.telefono} · {p.ciudad}
+                {p.valor ? ` · $${p.valor.toLocaleString("es-CO")}` : ""}
+                {p.ultimo_mensaje
+                  ? ` · escribió ${formatDistanceToNow(new Date(p.ultimo_mensaje), { addSuffix: true, locale: es })}`
+                  : ""}
+              </p>
+            </div>
+            {p.conversacion ? (
+              <a
+                href={`/inbox?c=${p.conversacion}`}
+                className="rounded-md border border-border px-2.5 py-1 text-xs text-foreground hover:bg-muted"
+              >
+                Abrir chat
+              </a>
+            ) : null}
+          </div>
+
+          {p.pide.length || p.resumen ? (
+            <ul className="space-y-1 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
+              {p.pide.map((x, i) => (
+                <li key={i} className="font-medium text-foreground">
+                  • {x}
+                </li>
+              ))}
+              {p.resumen ? <li className="text-foreground">• {p.resumen}</li> : null}
+            </ul>
+          ) : null}
+
+          <Fila etiqueta="Dirección Dropi" valor={p.direccion} />
+          <Mensajes lista={p.mensajes} />
+
+          <p className="text-xs text-muted-foreground">
+            {p.caso_estado === "pendiente" || p.caso_estado === "con_nota"
+              ? "Su respuesta espera en «Por revisar»."
+              : p.le_respondimos
+                ? "Ya le respondimos: falta confirmarlo en Dropi."
+                : "Todavía no le hemos contestado su último mensaje."}
+          </p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+const VISTAS = {
+  abiertos: "Por revisar",
+  cerrados: "Resueltos",
+  dropi: "Confirmar en Dropi",
+} as const;
+
+export default function AuditoriaPage() {
+  const [vista, setVista] = useState<keyof typeof VISTAS>("abiertos");
+  const [casos, setCasos] = useState<Caso[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [recarga, setRecarga] = useState(0);
+
   const cargar = useCallback(async () => {
+    if (vista === "dropi") {
+      setRecarga((n) => n + 1);
+      return;
+    }
     try {
       const res = await fetch(`/api/agente/auditoria?vista=${vista}`, { cache: "no-store" });
       const data = await res.json().catch(() => ({}));
@@ -509,7 +661,7 @@ export default function AuditoriaPage() {
         </div>
         <div className="flex items-center gap-2">
           <div className="flex rounded-lg border border-border p-0.5">
-            {(["abiertos", "cerrados"] as const).map((v) => (
+            {(Object.keys(VISTAS) as (keyof typeof VISTAS)[]).map((v) => (
               <button
                 key={v}
                 onClick={() => {
@@ -521,7 +673,7 @@ export default function AuditoriaPage() {
                   vista === v ? "bg-muted font-medium text-foreground" : "text-muted-foreground",
                 )}
               >
-                {v === "abiertos" ? "Por revisar" : "Resueltos"}
+                {VISTAS[v]}
               </button>
             ))}
           </div>
@@ -533,7 +685,9 @@ export default function AuditoriaPage() {
 
       <AvisoAgente />
 
-      {error ? (
+      {vista === "dropi" ? (
+        <PorConfirmar recarga={recarga} />
+      ) : error ? (
         <p className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{error}</p>
       ) : casos === null ? (
         <div className="flex h-48 items-center justify-center">
