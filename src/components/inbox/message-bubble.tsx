@@ -163,6 +163,18 @@ function MessageContent({
       // before the fix).
       return (
         <div>
+          {/* The template's media header (the product photo on top). */}
+          {message.media_url ? (
+            <div className="mb-1">
+              {message.media_type === "video" ? (
+                <MediaVideoBubble message={message} onOpen={openMedia} t={t} />
+              ) : message.media_type === "document" ? (
+                <MediaDocumentBubble message={message} t={t} />
+              ) : (
+                <MediaImageBubble message={message} onOpen={openMedia} t={t} />
+              )}
+            </div>
+          ) : null}
           <span
             className={cn(
               "mb-1 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium",

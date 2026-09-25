@@ -4,8 +4,32 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   sendMessageToConversation,
   SendMessageError,
+  templateHeaderMedia,
   type SendMessageParams,
 } from './send-message';
+import type { MessageTemplate } from '@/types';
+
+describe('templateHeaderMedia', () => {
+  const row = (over: Partial<MessageTemplate>) => over as MessageTemplate;
+
+  it('uses the headerMediaUrl the caller sent', () => {
+    expect(
+      templateHeaderMedia(row({ header_type: 'image' }), { headerMediaUrl: 'https://x.test/p.jpg' })
+    ).toBe('https://x.test/p.jpg');
+  });
+
+  it("falls back to the template's stored link", () => {
+    expect(
+      templateHeaderMedia(row({ header_type: 'image', header_media_url: 'https://x.test/s.jpg' }), {})
+    ).toBe('https://x.test/s.jpg');
+  });
+
+  it('is null for text headers and templates without a header', () => {
+    expect(templateHeaderMedia(row({ header_type: 'text' }), { headerMediaUrl: 'https://x.test/p.jpg' })).toBeNull();
+    expect(templateHeaderMedia(row({}), undefined)).toBeNull();
+    expect(templateHeaderMedia(null, { headerMediaUrl: 'https://x.test/p.jpg' })).toBeNull();
+  });
+});
 
 // A db that explodes if touched — these tests cover the param
 // validation that MUST short-circuit before any query runs.

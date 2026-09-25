@@ -72,6 +72,25 @@ export class SendMessageError extends Error {
   }
 }
 
+/**
+ * The media link of a template's image/video/document header, as sent:
+ * the caller's `headerMediaUrl`, else the template's stored link (the
+ * same precedence as the send-builder). Null for text/no headers.
+ */
+export function templateHeaderMedia(
+  template: MessageTemplate | null,
+  messageParams: unknown
+): string | null {
+  const type = template?.header_type;
+  if (type !== 'image' && type !== 'video' && type !== 'document') return null;
+  const fromParams =
+    messageParams && typeof messageParams === 'object'
+      ? (messageParams as { headerMediaUrl?: unknown }).headerMediaUrl
+      : undefined;
+  if (typeof fromParams === 'string' && fromParams.trim()) return fromParams.trim();
+  return template?.header_media_url || null;
+}
+
 export interface SendMessageParams {
   conversationId: string;
   messageType: string;
@@ -473,6 +492,13 @@ export async function sendMessageToConversation(
           )
         : (contentText ?? null);
 
+  // A template's image/video/document header is part of what the
+  // customer sees, but it travels in the template params, not in
+  // `mediaUrl` — so it was never stored and the Inbox showed the
+  // template without its picture.
+  const headerMedia =
+    messageType === 'template' ? templateHeaderMedia(templateRow, templateMessageParams) : null
+
   const { data: messageRecord, error: msgError } = await db
     .from('messages')
     .insert({
@@ -480,7 +506,8 @@ export async function sendMessageToConversation(
       sender_type: 'agent',
       content_type: messageType,
       content_text: persistedText,
-      media_url: mediaUrl || null,
+      media_url: mediaUrl || headerMedia || null,
+      ...(headerMedia ? { media_type: templateRow!.header_type } : {}),
       template_name: templateName || null,
       interactive_payload:
         messageType === 'interactive' ? interactivePayload : null,
