@@ -199,3 +199,32 @@ export async function GET() {
   salida.sort((a, b) => (b.ultimo_mensaje ?? '').localeCompare(a.ultimo_mensaje ?? ''))
   return NextResponse.json({ pedidos: salida })
 }
+
+// POST /api/agente/por-confirmar  { pedido }
+//
+// "Armar confirmación": Andrés already settled the chat by hand. Queues an
+// `armar_confirmacion` task; on its next pass (≤30 s) the agent reads the
+// conversation, builds the confirmation message with the final address or
+// quantity (agente/cambios.py) and leaves it in the audit queue.
+export async function POST(request: Request) {
+  try {
+    await requireAgenteAccess()
+  } catch (err) {
+    return toErrorResponse(err)
+  }
+  const body = (await request.json().catch(() => null)) as { pedido?: unknown } | null
+  const pedido = typeof body?.pedido === 'string' ? body.pedido.trim() : ''
+  if (!/^\d{5,12}$/.test(pedido)) {
+    return NextResponse.json({ error: 'Número de pedido inválido' }, { status: 400 })
+  }
+  const { error } = await supabaseAdmin()
+    .from('agente_tareas')
+    .insert({
+      clave: `armar:${pedido}:${Date.now()}`,
+      tipo: 'armar_confirmacion',
+      ejecutar_en: new Date().toISOString(),
+      datos: { pedido },
+    })
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ ok: true })
+}

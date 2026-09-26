@@ -499,6 +499,39 @@ const COLOR_INTENCION: Record<string, string> = {
   cancela: "bg-destructive/15 text-destructive",
 };
 
+// Andrés settled the chat by hand: ask the agent to read it and draft the
+// confirmation with the final address/quantity. It lands in "Por revisar".
+function ArmarConfirmacion({ pedido }: { pedido: string }) {
+  const [estado, setEstado] = useState<"listo" | "enviando" | "pedido">("listo");
+  const pedir = async () => {
+    setEstado("enviando");
+    try {
+      const res = await fetch("/api/agente/por-confirmar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pedido }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data.error ?? "No se pudo pedir la confirmación");
+        setEstado("listo");
+        return;
+      }
+      toast.success("El agente la arma en menos de un minuto. La verás en «Por revisar».");
+      setEstado("pedido");
+    } catch {
+      toast.error("No se pudo pedir la confirmación");
+      setEstado("listo");
+    }
+  };
+  return (
+    <Button size="sm" variant="outline" disabled={estado !== "listo"} onClick={pedir} className="h-auto py-1 text-xs">
+      {estado === "enviando" ? <Loader2 className="animate-spin" /> : <Check />}
+      {estado === "pedido" ? "Pedida" : "Armar confirmación"}
+    </Button>
+  );
+}
+
 // Orders the customer already answered in the chat but that are still
 // "Por confirmar" in Dropi: what Andrés has left to confirm or fix there.
 function PorConfirmar({ recarga }: { recarga: number }) {
@@ -574,14 +607,17 @@ function PorConfirmar({ recarga }: { recarga: number }) {
                   : ""}
               </p>
             </div>
-            {p.conversacion ? (
-              <a
-                href={`/inbox?c=${p.conversacion}`}
-                className="rounded-md border border-border px-2.5 py-1 text-xs text-foreground hover:bg-muted"
-              >
-                Abrir chat
-              </a>
-            ) : null}
+            <div className="flex flex-wrap gap-2">
+              {p.conversacion ? (
+                <a
+                  href={`/inbox?c=${p.conversacion}`}
+                  className="rounded-md border border-border px-2.5 py-1 text-xs text-foreground hover:bg-muted"
+                >
+                  Abrir chat
+                </a>
+              ) : null}
+              <ArmarConfirmacion pedido={p.pedido} />
+            </div>
           </div>
 
           {p.pide.length || p.resumen ? (
