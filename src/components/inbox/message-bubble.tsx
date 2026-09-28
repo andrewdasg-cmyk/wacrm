@@ -80,6 +80,12 @@ function StatusIcon({
   }
 }
 
+// Text uses `wrap-anywhere` (overflow-wrap: anywhere), not `break-words`.
+// The bubble is sized to its content (the row aligns it to one side), and
+// `break-word` does not lower an element's min-content width: one long
+// unbroken token - a cart-recovery link - stretched the bubble past the
+// screen and showed only a slice of the link. `anywhere` does, so the
+// bubble keeps its 75% cap and the link wraps.
 function MessageContent({
   message,
   t,
@@ -99,7 +105,7 @@ function MessageContent({
   switch (message.content_type) {
     case "text":
       return (
-        <p className="whitespace-pre-wrap break-words text-sm">
+        <p className="whitespace-pre-wrap wrap-anywhere text-sm">
           {message.content_text}
         </p>
       );
@@ -113,7 +119,7 @@ function MessageContent({
             <MediaUnavailable label={t("photo")} t={t} />
           )}
           {message.content_text && (
-            <p className="mt-1 whitespace-pre-wrap break-words text-sm">
+            <p className="mt-1 whitespace-pre-wrap wrap-anywhere text-sm">
               {message.content_text}
             </p>
           )}
@@ -129,7 +135,7 @@ function MessageContent({
             <MediaUnavailable label={t("video")} t={t} />
           )}
           {message.content_text && (
-            <p className="mt-1 whitespace-pre-wrap break-words text-sm">
+            <p className="mt-1 whitespace-pre-wrap wrap-anywhere text-sm">
               {message.content_text}
             </p>
           )}
@@ -187,12 +193,12 @@ function MessageContent({
             {t("template")}
           </span>
           {message.content_text ? (
-            <p className="mt-1 whitespace-pre-wrap break-words text-sm">
+            <p className="mt-1 whitespace-pre-wrap wrap-anywhere text-sm">
               {message.content_text}
             </p>
           ) : (
             message.template_name && (
-              <p className="mt-1 break-words text-sm italic opacity-80">
+              <p className="mt-1 wrap-anywhere text-sm italic opacity-80">
                 {message.template_name}
               </p>
             )
@@ -228,14 +234,14 @@ function MessageContent({
               <CornerDownLeft className="h-3 w-3" />
               {t("buttonReply")}
             </span>
-            <p className="whitespace-pre-wrap break-words text-sm">
+            <p className="whitespace-pre-wrap wrap-anywhere text-sm">
               {message.content_text || t("interactiveReply")}
             </p>
           </div>
         );
       }
       return (
-        <p className="whitespace-pre-wrap break-words text-sm">
+        <p className="whitespace-pre-wrap wrap-anywhere text-sm">
           {message.content_text || t("interactiveReply")}
         </p>
       );
@@ -243,7 +249,7 @@ function MessageContent({
 
     default:
       return (
-        <p className="whitespace-pre-wrap break-words text-sm">
+        <p className="whitespace-pre-wrap wrap-anywhere text-sm">
           {message.content_text || t("unsupported")}
         </p>
       );

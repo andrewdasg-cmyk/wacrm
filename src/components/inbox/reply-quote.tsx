@@ -55,9 +55,10 @@ export function ReplyQuote({
          *  impossibly-wide line and — because the parent flex chain
          *  lacked `min-w-0` at every step — pushed the entire inbox
          *  layout wider, shoving the contact sidebar off-screen.
-         *  `break-words` also wraps long URLs that have no whitespace
-         *  to break on. Issue #165. */}
-        <div className="whitespace-pre-wrap break-words text-xs text-foreground/80">
+         *  `wrap-anywhere` also wraps long URLs that have no whitespace
+         *  to break on (`break-words` did not: it leaves the min-content
+         *  width at the full URL). Issue #165. */}
+        <div className="whitespace-pre-wrap wrap-anywhere text-xs text-foreground/80">
           {preview}
         </div>
       </div>
