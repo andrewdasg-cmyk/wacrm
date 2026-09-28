@@ -29,6 +29,7 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { aBotones } from "@/lib/agente/botones";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -387,6 +388,7 @@ function Tarjeta({ caso, alCambiar }: { caso: Caso; alCambiar: () => void }) {
   const estado = ESTADO[caso.estado] ?? { texto: caso.estado, clase: "bg-muted" };
   const abierto = ["pendiente", "error"].includes(caso.estado);
   const tieneMensaje = Boolean(caso.mensaje_propuesto || caso.plantilla_meta);
+  const conBotones = aBotones(caso.mensaje_propuesto);
 
   // Approving a confirmation confirms the order in Dropi; approving a pickup
   // first contact tells the customer where to collect it. Either way Dropi
@@ -506,7 +508,26 @@ function Tarjeta({ caso, alCambiar }: { caso: Caso; alCambiar: () => void }) {
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
             {caso.plantilla_meta ? `Plantilla ${caso.plantilla_meta}` : "Mensaje que saldría"}
           </p>
-          {caso.mensaje_propuesto || caso.plantilla_texto ? (
+          {caso.mensaje_propuesto && conBotones ? (
+            // What the customer gets: the agent sends the numbered menu as
+            // WhatsApp buttons (lib/agente/botones.ts).
+            <div className="space-y-1.5">
+              <div className="whitespace-pre-wrap wrap-anywhere rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3 text-sm text-foreground">
+                {conBotones.cuerpo}
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {conBotones.botones.map((b) => (
+                  <span
+                    key={b}
+                    className="rounded-md border border-emerald-500/40 bg-background px-3 py-1 text-sm font-medium text-emerald-700 dark:text-emerald-400"
+                  >
+                    {b}
+                  </span>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">Le llega con botones: el cliente toca, no escribe el número.</p>
+            </div>
+          ) : caso.mensaje_propuesto || caso.plantilla_texto ? (
             <div className="whitespace-pre-wrap wrap-anywhere rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3 text-sm text-foreground">
               {caso.mensaje_propuesto || caso.plantilla_texto}
             </div>
