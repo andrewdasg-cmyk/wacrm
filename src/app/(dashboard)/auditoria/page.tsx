@@ -119,7 +119,7 @@ function Fila({ etiqueta, valor }: { etiqueta: string; valor: unknown }) {
   return (
     <div className="grid grid-cols-[8.5rem_1fr] gap-2 text-sm">
       <span className="text-muted-foreground">{etiqueta}</span>
-      <span className="break-words text-foreground">{t}</span>
+      <span className="wrap-anywhere text-foreground">{t}</span>
     </div>
   );
 }
@@ -507,7 +507,7 @@ function Tarjeta({ caso, alCambiar }: { caso: Caso; alCambiar: () => void }) {
             {caso.plantilla_meta ? `Plantilla ${caso.plantilla_meta}` : "Mensaje que saldría"}
           </p>
           {caso.mensaje_propuesto || caso.plantilla_texto ? (
-            <div className="whitespace-pre-wrap rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3 text-sm text-foreground">
+            <div className="whitespace-pre-wrap wrap-anywhere rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3 text-sm text-foreground">
               {caso.mensaje_propuesto || caso.plantilla_texto}
             </div>
           ) : (
