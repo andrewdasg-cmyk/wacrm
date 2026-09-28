@@ -2,6 +2,12 @@ import { NextResponse } from 'next/server'
 import { toErrorResponse } from '@/lib/auth/account'
 import { supabaseAdmin } from '@/lib/automations/admin-client'
 import { requireAgenteAccess } from '@/lib/agente/access'
+import {
+  cambiosDelContexto,
+  direccionPideRetiro,
+  esCasoDeRetiro,
+  otraTransportadora,
+} from '@/lib/agente/alertas'
 
 // GET /api/agente/por-confirmar
 //
@@ -25,6 +31,7 @@ interface RegistroDropi {
   fecha_pedido?: string
   tienda?: string
   producto?: string
+  transportadora?: string
 }
 
 interface Mensaje {
@@ -73,7 +80,7 @@ export async function GET() {
   const ids = pedidos.map(([p]) => p)
   const telefonos = [...new Set(pedidos.map(([, r]) => ultimos10(r.telefono)))]
 
-  const [casos, eventos, contactos] = await Promise.all([
+  const [casos, eventos, contactos, casosRetiro] = await Promise.all([
     db
       .from('agente_auditoria')
       .select('pedido, tipo, estado, actualizado_en, contexto')
@@ -91,7 +98,23 @@ export async function GET() {
       .select('id, phone')
       .eq('account_id', ctx.accountId)
       .or(telefonos.map((t) => `phone.like.*${t}`).join(',')),
+    // Any case of these orders, to find the pickups: the agent sends every
+    // pickup first contact to audit with its office (see lib/agente/alertas).
+    db
+      .from('agente_auditoria')
+      .select('pedido, plantilla_meta, contexto')
+      .in('pedido', ids)
+      .order('actualizado_en', { ascending: false }),
   ])
+
+  const oficinaDe = new Map<string, string | null>()
+  for (const c of casosRetiro.data ?? []) {
+    if (!c.pedido || oficinaDe.has(c.pedido)) continue
+    const ctx = (c.contexto ?? {}) as Record<string, unknown>
+    if (esCasoDeRetiro(c.plantilla_meta, ctx)) {
+      oficinaDe.set(c.pedido, typeof ctx.oficina === 'string' && ctx.oficina ? ctx.oficina : null)
+    }
+  }
 
   const contactoTel = new Map<string, string>()
   for (const c of contactos.data ?? []) contactoTel.set(c.id, ultimos10(c.phone))
@@ -156,14 +179,15 @@ export async function GET() {
     const clasif = (ctxCaso.clasificacion ?? detalleEv.clasificacion ?? null) as
       | { intencion?: string; resumen?: string }
       | null
-    const pide: string[] = []
-    if (typeof ctxCaso.unidades === 'number') {
-      const valor = typeof ctxCaso.valor_nuevo === 'number' ? ` por $${ctxCaso.valor_nuevo.toLocaleString('es-CO')}` : ''
-      pide.push(`Cambiar la cantidad a ${ctxCaso.unidades} unidades${valor}`)
+    const pide = cambiosDelContexto(ctxCaso)
+    // A change the agent could not turn into data ("otro teléfono", a
+    // product) still has to be applied in Dropi: its summary is the change.
+    const cambios = [...pide]
+    if (!cambios.length && (clasif?.intencion === 'cambio' || clasif?.intencion === 'dato') && clasif.resumen) {
+      cambios.push(clasif.resumen)
     }
-    if (typeof ctxCaso.direccion_nueva === 'string' && ctxCaso.direccion_nueva) {
-      pide.push(`Cambiar la dirección a: ${ctxCaso.direccion_nueva}`)
-    }
+    const esRetiro = oficinaDe.has(pedido) || direccionPideRetiro(r.direccion)
+    const oficina = oficinaDe.get(pedido) ?? null
     const ultimoCliente = respuestas.at(-1)
     const ultimoNuestro = msgs.filter((m) => m.sender_type !== 'customer').at(-1)
 
@@ -181,6 +205,10 @@ export async function GET() {
       etiqueta: clasif?.intencion ? (INTENCION[clasif.intencion] ?? clasif.intencion) : 'Respondió',
       resumen: clasif?.resumen ?? '',
       pide,
+      cambios,
+      retiro: esRetiro
+        ? { oficina, otra_transportadora: otraTransportadora(oficina, r.transportadora) }
+        : null,
       caso_estado: caso?.estado ?? null,
       // Did we write after his last message? Otherwise he is waiting on us.
       le_respondimos: Boolean(

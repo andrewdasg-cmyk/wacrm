@@ -18,10 +18,12 @@ import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
 import {
   AlertTriangle,
+  Building2,
   Check,
   ClipboardCheck,
   Loader2,
   MessageSquareText,
+  PencilLine,
   RefreshCw,
   StickyNote,
   X,
@@ -29,7 +31,14 @@ import {
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  cambiosDelContexto,
+  direccionPideRetiro,
+  esCasoDeRetiro,
+  type RetiroAlerta,
+} from "@/lib/agente/alertas";
 import { cn } from "@/lib/utils";
 
 interface Caso {
@@ -195,6 +204,56 @@ function Historial({ h }: { h: unknown }) {
   );
 }
 
+// What has to be changed in Dropi before confirming, big enough that it
+// cannot be missed (Andrés, 28/9). Confirming does not apply any of it.
+function AlertasDropi({ retiro, cambios }: { retiro: RetiroAlerta | null; cambios: string[] }) {
+  if (!retiro && !cambios.length) return null;
+  return (
+    <div className="space-y-2">
+      {retiro ? (
+        <div className="rounded-xl border-2 border-orange-500 bg-orange-500/10 p-4">
+          <p className="flex items-center gap-2 text-base font-bold tracking-wide text-orange-700 dark:text-orange-300">
+            <Building2 className="h-5 w-5 shrink-0" />
+            RETIRO EN OFICINA
+          </p>
+          <p className="mt-1.5 text-sm text-foreground">
+            Antes de confirmar, en Dropi déjelo como <strong>retiro en oficina</strong>
+            {retiro.oficina ? (
+              <>
+                : <strong>{retiro.oficina}</strong>
+              </>
+            ) : (
+              ". La dirección lo pide, pero el agente no ubicó la oficina: confirme cuál con el cliente"
+            )}
+            .
+          </p>
+          {retiro.otra_transportadora ? (
+            <p className="mt-1.5 text-sm font-semibold text-destructive">
+              En Dropi va con {retiro.otra_transportadora}: cámbiele la transportadora.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+      {cambios.length ? (
+        <div className="rounded-xl border-2 border-red-500 bg-red-500/10 p-4">
+          <p className="flex items-center gap-2 text-base font-bold tracking-wide text-red-700 dark:text-red-300">
+            <PencilLine className="h-5 w-5 shrink-0" />
+            CAMBIOS POR APLICAR EN DROPI
+          </p>
+          <ul className="mt-1.5 space-y-1 text-sm">
+            {cambios.map((c, i) => (
+              <li key={i} className="font-medium text-foreground">
+                • {c}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 text-xs text-muted-foreground">Aplíquelos en Dropi antes de confirmar.</p>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function Tarjeta({ caso, alCambiar }: { caso: Caso; alCambiar: () => void }) {
   const [nota, setNota] = useState("");
   const [abrirNota, setAbrirNota] = useState(false);
@@ -203,6 +262,20 @@ function Tarjeta({ caso, alCambiar }: { caso: Caso; alCambiar: () => void }) {
   const estado = ESTADO[caso.estado] ?? { texto: caso.estado, clase: "bg-muted" };
   const abierto = ["pendiente", "error"].includes(caso.estado);
   const tieneMensaje = Boolean(caso.mensaje_propuesto || caso.plantilla_meta);
+
+  // Approving a confirmation confirms the order in Dropi; approving a pickup
+  // first contact tells the customer where to collect it. Either way Dropi
+  // has to be right first, so the approve button waits for the tick.
+  const antesDeConfirmar = caso.tipo === "primer_contacto" || caso.tipo === "confirmacion";
+  const retiro: RetiroAlerta | null =
+    antesDeConfirmar &&
+    (esCasoDeRetiro(caso.plantilla_meta, ctx) ||
+      (caso.tipo === "confirmacion" && direccionPideRetiro(texto(ctx.direccion_dropi))))
+      ? { oficina: ctx.oficina ? texto(ctx.oficina) : null, otra_transportadora: null }
+      : null;
+  const cambios = caso.tipo === "confirmacion" ? cambiosDelContexto(ctx) : [];
+  const conAlerta = Boolean(retiro || cambios.length);
+  const [enDropi, setEnDropi] = useState(false);
 
   const actuar = useCallback(
     async (accion: string) => {
@@ -236,7 +309,12 @@ function Tarjeta({ caso, alCambiar }: { caso: Caso; alCambiar: () => void }) {
   );
 
   return (
-    <div className="space-y-4 rounded-xl border border-border bg-card p-4 sm:p-5">
+    <div
+      className={cn(
+        "space-y-4 rounded-xl border bg-card p-4 sm:p-5",
+        conAlerta && abierto ? "border-orange-500/60 ring-1 ring-orange-500/30" : "border-border",
+      )}
+    >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -259,6 +337,8 @@ function Tarjeta({ caso, alCambiar }: { caso: Caso; alCambiar: () => void }) {
           {estado.texto}
         </span>
       </div>
+
+      {abierto ? <AlertasDropi retiro={retiro} cambios={cambios} /> : null}
 
       {caso.motivos?.length ? (
         <ul className="space-y-1 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
@@ -347,11 +427,18 @@ function Tarjeta({ caso, alCambiar }: { caso: Caso; alCambiar: () => void }) {
               </div>
             </div>
           ) : (
+            <div className="space-y-2">
+            {conAlerta && tieneMensaje ? (
+              <label className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-border bg-muted/40 p-3 text-sm font-medium text-foreground">
+                <Checkbox checked={enDropi} onCheckedChange={(v) => setEnDropi(Boolean(v))} />
+                Ya lo dejé así en Dropi
+              </label>
+            ) : null}
             <div className="flex flex-wrap gap-2">
               {tieneMensaje ? (
                 <Button
                   size="sm"
-                  disabled={!!ocupado}
+                  disabled={!!ocupado || (conAlerta && !enDropi)}
                   onClick={() => actuar(caso.estado === "error" ? "reintentar" : "aprobar")}
                 >
                   {ocupado === "aprobar" || ocupado === "reintentar" ? (
@@ -377,6 +464,7 @@ function Tarjeta({ caso, alCambiar }: { caso: Caso; alCambiar: () => void }) {
                 {ocupado === "rechazar" ? <Loader2 className="animate-spin" /> : <X />}
                 Rechazar
               </Button>
+            </div>
             </div>
           )}
         </div>
@@ -484,6 +572,8 @@ interface PedidoPorConfirmar {
   etiqueta: string;
   resumen: string;
   pide: string[];
+  cambios: string[];
+  retiro: RetiroAlerta | null;
   caso_estado: string | null;
   le_respondimos: boolean;
   ultimo_mensaje: string | null;
@@ -577,14 +667,40 @@ function PorConfirmar({ recarga }: { recarga: number }) {
       </div>
     );
 
+  // The ones with something to fix in Dropi go first.
+  const conAlerta = (p: PedidoPorConfirmar) => Boolean(p.retiro || p.cambios.length);
+  const ordenados = [...pedidos].sort((a, b) => Number(conAlerta(b)) - Number(conAlerta(a)));
+  const retiros = pedidos.filter((p) => p.retiro).length;
+  const conCambios = pedidos.filter((p) => p.cambios.length).length;
+
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">
         {pedidos.length} pedido{pedidos.length === 1 ? "" : "s"} siguen «Por confirmar» en Dropi y el cliente ya
         respondió en el chat.
       </p>
-      {pedidos.map((p) => (
-        <div key={p.pedido} className="space-y-2 rounded-xl border border-border bg-card p-4">
+      {retiros || conCambios ? (
+        <div className="flex items-start gap-2 rounded-lg border-2 border-orange-500 bg-orange-500/10 p-3 text-sm font-semibold text-foreground">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-orange-600 dark:text-orange-300" />
+          <span>
+            {[
+              retiros ? `${retiros} retiro${retiros === 1 ? "" : "s"} en oficina` : "",
+              conCambios ? `${conCambios} con cambios por aplicar` : "",
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+            : arréglelos en Dropi antes de confirmar. Van primero en la lista.
+          </span>
+        </div>
+      ) : null}
+      {ordenados.map((p) => (
+        <div
+          key={p.pedido}
+          className={cn(
+            "space-y-2 rounded-xl border bg-card p-4",
+            conAlerta(p) ? "border-orange-500/60 ring-1 ring-orange-500/30" : "border-border",
+          )}
+        >
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
@@ -620,15 +736,13 @@ function PorConfirmar({ recarga }: { recarga: number }) {
             </div>
           </div>
 
-          {p.pide.length || p.resumen ? (
-            <ul className="space-y-1 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
-              {p.pide.map((x, i) => (
-                <li key={i} className="font-medium text-foreground">
-                  • {x}
-                </li>
-              ))}
-              {p.resumen ? <li className="text-foreground">• {p.resumen}</li> : null}
-            </ul>
+          <AlertasDropi retiro={p.retiro} cambios={p.cambios} />
+
+          {/* What the customer said, when it is not already a change above. */}
+          {p.resumen && !p.cambios.includes(p.resumen) ? (
+            <p className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm text-foreground">
+              • {p.resumen}
+            </p>
           ) : null}
 
           <Fila etiqueta="Dirección Dropi" valor={p.direccion} />
