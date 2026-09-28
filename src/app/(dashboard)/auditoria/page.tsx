@@ -13,8 +13,8 @@
 // src/lib/agente/access.ts), so it skips the i18n catalogs.
 // ============================================================
 
-import { useCallback, useEffect, useState } from "react";
-import { formatDistanceToNow } from "date-fns";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { format, formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
 import {
   AlertTriangle,
@@ -254,6 +254,131 @@ function AlertasDropi({ retiro, cambios }: { retiro: RetiroAlerta | null; cambio
   );
 }
 
+interface MensajeChat {
+  id: string;
+  nuestro: boolean;
+  tipo: string;
+  texto: string | null;
+  plantilla: string | null;
+  media_url: string | null;
+  media_type: string | null;
+  estado: string | null;
+  fecha: string;
+}
+
+// The whole chat with the customer, opened on demand: a case only shows the
+// last thing he wrote, and with many cases open it is easy to lose the
+// thread (Andrés, 28/9). Loads when opened, so a long queue stays light.
+function Conversacion({ telefono }: { telefono: string }) {
+  const [abierta, setAbierta] = useState(false);
+  const [datos, setDatos] = useState<{
+    conversacion: string | null;
+    mensajes: MensajeChat[];
+    completa: boolean;
+  } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const lista = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!abierta) return;
+    let vivo = true;
+    fetch(`/api/agente/conversacion?telefono=${encodeURIComponent(telefono)}`, { cache: "no-store" })
+      .then(async (r) => {
+        const d = await r.json().catch(() => ({}));
+        if (!vivo) return;
+        if (!r.ok) setError(d.error ?? "No se pudo cargar la conversación");
+        else {
+          setError(null);
+          setDatos(d);
+        }
+      })
+      .catch(() => vivo && setError("No se pudo cargar la conversación"));
+    return () => {
+      vivo = false;
+    };
+  }, [abierta, telefono]);
+
+  // Open at the end, where the conversation is now.
+  useEffect(() => {
+    if (abierta && datos && lista.current) lista.current.scrollTop = lista.current.scrollHeight;
+  }, [abierta, datos]);
+
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => setAbierta((v) => !v)}
+          className="h-auto py-1 text-xs"
+        >
+          <MessageSquareText />
+          {abierta ? "Ocultar conversación" : "Ver conversación"}
+        </Button>
+        {abierta && datos?.conversacion ? (
+          <a
+            href={`/inbox?c=${datos.conversacion}`}
+            className="rounded-md border border-border px-2.5 py-1 text-xs text-foreground hover:bg-muted"
+          >
+            Abrir en el chat
+          </a>
+        ) : null}
+      </div>
+      {abierta ? (
+        <div
+          ref={lista}
+          className="max-h-[28rem] space-y-1.5 overflow-y-auto rounded-lg border border-border bg-background/60 p-3"
+        >
+          {error ? (
+            <p className="text-sm text-destructive">{error}</p>
+          ) : datos === null ? (
+            <div className="flex justify-center py-6">
+              <Loader2 className="h-5 w-5 animate-spin text-primary" />
+            </div>
+          ) : !datos.mensajes.length ? (
+            <p className="text-sm text-muted-foreground">No hay mensajes con este número en el CRM.</p>
+          ) : (
+            <>
+              {!datos.completa ? (
+                <p className="text-center text-xs text-muted-foreground">
+                  Solo los últimos mensajes. El resto, en «Abrir en el chat».
+                </p>
+              ) : null}
+              {datos.mensajes.map((m) => (
+                <div key={m.id} className={cn("flex", m.nuestro ? "justify-end" : "justify-start")}>
+                  <div
+                    className={cn(
+                      "max-w-[85%] rounded-lg px-3 py-1.5 text-sm text-foreground",
+                      m.nuestro ? "bg-primary/15" : "bg-muted",
+                    )}
+                  >
+                    {m.plantilla ? (
+                      <p className="mb-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                        Plantilla {m.plantilla}
+                      </p>
+                    ) : null}
+                    {m.media_url && (m.media_type === "image" || m.tipo === "image" || m.tipo === "sticker") ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={m.media_url} alt="foto o sticker" className="mb-1 max-h-40 rounded" />
+                    ) : null}
+                    <p className="whitespace-pre-wrap wrap-anywhere">
+                      {m.texto || (m.tipo !== "text" ? `[${m.tipo}]` : "")}
+                    </p>
+                    <p className="mt-0.5 text-right text-[10px] text-muted-foreground">
+                      {format(new Date(m.fecha), "d MMM, h:mm a", { locale: es })}
+                      {m.estado === "failed" ? " · no se entregó" : ""}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function Tarjeta({ caso, alCambiar }: { caso: Caso; alCambiar: () => void }) {
   const [nota, setNota] = useState("");
   const [abrirNota, setAbrirNota] = useState(false);
@@ -374,6 +499,7 @@ function Tarjeta({ caso, alCambiar }: { caso: Caso; alCambiar: () => void }) {
 
       <Mensajes lista={ctx.mensajes} />
       {ctx.mensaje ? <Mensajes lista={[{ texto: ctx.mensaje, tipo: "text" }]} /> : null}
+      {caso.telefono ? <Conversacion telefono={caso.telefono} /> : null}
 
       {tieneMensaje ? (
         <div className="space-y-1.5">
@@ -413,7 +539,11 @@ function Tarjeta({ caso, alCambiar }: { caso: Caso; alCambiar: () => void }) {
               <Textarea
                 value={nota}
                 onChange={(e) => setNota(e.target.value)}
-                placeholder="Qué debe cambiar el agente. Ej.: pregúntale el número del apartamento; la dirección correcta es…"
+                placeholder={
+                  tieneMensaje
+                    ? "Qué debe cambiar el agente. Ej.: pregúntale el número del apartamento; la dirección correcta es…"
+                    : "Qué le respondemos. Ej.: salúdalo y pregúntale en qué le ayudo con su pedido; dile que la dirección quedó bien…"
+                }
                 rows={3}
               />
               <div className="flex gap-2">
@@ -454,12 +584,13 @@ function Tarjeta({ caso, alCambiar }: { caso: Caso; alCambiar: () => void }) {
                   Ya lo atendí
                 </Button>
               )}
-              {tieneMensaje ? (
-                <Button size="sm" variant="outline" disabled={!!ocupado} onClick={() => setAbrirNota(true)}>
-                  <StickyNote />
-                  Dejar nota
-                </Button>
-              ) : null}
+              {/* Also on cases with nothing to send (a customer's reply): the
+                  note says what to answer, and the agent comes back with a
+                  message from the skill for a second approval (28/9). */}
+              <Button size="sm" variant="outline" disabled={!!ocupado} onClick={() => setAbrirNota(true)}>
+                <StickyNote />
+                {tieneMensaje ? "Dejar nota" : "Nota: qué responder"}
+              </Button>
               <Button size="sm" variant="destructive" disabled={!!ocupado} onClick={() => actuar("rechazar")}>
                 {ocupado === "rechazar" ? <Loader2 className="animate-spin" /> : <X />}
                 Rechazar
@@ -747,6 +878,7 @@ function PorConfirmar({ recarga }: { recarga: number }) {
 
           <Fila etiqueta="Dirección Dropi" valor={p.direccion} />
           <Mensajes lista={p.mensajes} />
+          <Conversacion telefono={p.telefono} />
 
           <p className="text-xs text-muted-foreground">
             {p.caso_estado === "pendiente" || p.caso_estado === "con_nota"
