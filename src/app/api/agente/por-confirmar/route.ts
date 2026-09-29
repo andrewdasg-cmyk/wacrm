@@ -52,6 +52,9 @@ const INTENCION: Record<string, string> = {
   otro: 'Escribió algo',
 }
 
+/** agente_eventos.tipo of "Quitar de la lista". */
+const QUITADO = 'confirmar_quitado'
+
 const ultimos10 = (t?: string) => (t ?? '').replace(/\D/g, '').slice(-10)
 
 // Dropi's dates are Bogotá time without a zone.
@@ -80,12 +83,15 @@ export async function GET() {
   const ids = pedidos.map(([p]) => p)
   const telefonos = [...new Set(pedidos.map(([, r]) => ultimos10(r.telefono)))]
 
-  const [casos, eventos, contactos, casosRetiro] = await Promise.all([
+  const [casos, eventos, contactos, casosRetiro, quitados] = await Promise.all([
+    // A case Andrés rejected, or one that expired, does not keep the order
+    // here (Hugo Acosta, 29/9: only the ad's auto-message, never an answer).
     db
       .from('agente_auditoria')
       .select('pedido, tipo, estado, actualizado_en, contexto')
       .in('pedido', ids)
       .in('tipo', ['confirmacion', 'respuesta'])
+      .not('estado', 'in', '(rechazado,vencido)')
       .order('actualizado_en', { ascending: false }),
     db
       .from('agente_eventos')
@@ -105,7 +111,16 @@ export async function GET() {
       .select('pedido, plantilla_meta, contexto')
       .in('pedido', ids)
       .order('actualizado_en', { ascending: false }),
+    // "Quitar de la lista" (DELETE below).
+    db
+      .from('agente_eventos')
+      .select('pedido, creado_en')
+      .in('pedido', ids)
+      .eq('tipo', QUITADO)
+      .order('creado_en', { ascending: false }),
   ])
+  const quitadoEn = new Map<string, string>()
+  for (const q of quitados.data ?? []) if (q.pedido && !quitadoEn.has(q.pedido)) quitadoEn.set(q.pedido, q.creado_en)
 
   const oficinaDe = new Map<string, string | null>()
   for (const c of casosRetiro.data ?? []) {
@@ -190,6 +205,9 @@ export async function GET() {
     const oficina = oficinaDe.get(pedido) ?? null
     const ultimoCliente = respuestas.at(-1)
     const ultimoNuestro = msgs.filter((m) => m.sender_type !== 'customer').at(-1)
+    // Removed by hand: it comes back only if the customer writes again.
+    const quitado = quitadoEn.get(pedido)
+    if (quitado && (!ultimoCliente || new Date(ultimoCliente.created_at) <= new Date(quitado))) continue
 
     salida.push({
       pedido,
@@ -253,6 +271,29 @@ export async function POST(request: Request) {
       ejecutar_en: new Date().toISOString(),
       datos: { pedido },
     })
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ ok: true })
+}
+
+// DELETE /api/agente/por-confirmar  { pedido }
+//
+// "Quitar de la lista": the order stays "Por confirmar" in Dropi but there is
+// nothing to confirm yet (James Parra only said "Buenas", 29/9). Logged as an
+// agente_eventos row; GET hides the order until the customer writes again.
+export async function DELETE(request: Request) {
+  try {
+    await requireAgenteAccess()
+  } catch (err) {
+    return toErrorResponse(err)
+  }
+  const body = (await request.json().catch(() => null)) as { pedido?: unknown } | null
+  const pedido = typeof body?.pedido === 'string' ? body.pedido.trim() : ''
+  if (!/^\d{5,12}$/.test(pedido)) {
+    return NextResponse.json({ error: 'Número de pedido inválido' }, { status: 400 })
+  }
+  const { error } = await supabaseAdmin()
+    .from('agente_eventos')
+    .insert({ tipo: QUITADO, pedido, detalle: { por: 'Andres (Confirmar en Dropi)' } })
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ ok: true })
 }

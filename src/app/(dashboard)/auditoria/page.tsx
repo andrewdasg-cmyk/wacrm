@@ -774,6 +774,39 @@ function ArmarConfirmacion({ pedido }: { pedido: string }) {
   );
 }
 
+// Nothing to confirm yet ("Buenas" and no answer since): hide the card until
+// the customer writes again.
+function QuitarDeLista({ pedido, onQuitado }: { pedido: string; onQuitado: () => void }) {
+  const [enviando, setEnviando] = useState(false);
+  const quitar = async () => {
+    setEnviando(true);
+    try {
+      const res = await fetch("/api/agente/por-confirmar", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pedido }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data.error ?? "No se pudo quitar");
+        setEnviando(false);
+        return;
+      }
+      toast.success("Quitado. Si el cliente vuelve a escribir, reaparece.");
+      onQuitado();
+    } catch {
+      toast.error("No se pudo quitar");
+      setEnviando(false);
+    }
+  };
+  return (
+    <Button size="sm" variant="ghost" disabled={enviando} onClick={quitar} className="h-auto py-1 text-xs text-muted-foreground">
+      {enviando ? <Loader2 className="animate-spin" /> : <X />}
+      Quitar de la lista
+    </Button>
+  );
+}
+
 // Orders the customer already answered in the chat but that are still
 // "Por confirmar" in Dropi: what Andrés has left to confirm or fix there.
 function PorConfirmar({ recarga }: { recarga: number }) {
@@ -885,6 +918,10 @@ function PorConfirmar({ recarga }: { recarga: number }) {
                 </a>
               ) : null}
               <ArmarConfirmacion pedido={p.pedido} />
+              <QuitarDeLista
+                pedido={p.pedido}
+                onQuitado={() => setPedidos((lista) => (lista ?? []).filter((x) => x.pedido !== p.pedido))}
+              />
             </div>
           </div>
 
