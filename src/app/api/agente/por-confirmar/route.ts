@@ -84,14 +84,16 @@ export async function GET() {
   const telefonos = [...new Set(pedidos.map(([, r]) => ultimos10(r.telefono)))]
 
   const [casos, eventos, contactos, casosRetiro, quitados] = await Promise.all([
-    // A case Andrés rejected, or one that expired, does not keep the order
-    // here (Hugo Acosta, 29/9: only the ad's auto-message, never an answer).
+    // A case Andrés rejected, marked as handled, or that expired does not
+    // keep the order here (Hugo Acosta, 29/9: only the ad's auto-message;
+    // Nelson Umbarila, 30/9: only the Releasit summary, before our first
+    // message). A real answer to us still shows it (`respuestas`).
     db
       .from('agente_auditoria')
       .select('pedido, tipo, estado, actualizado_en, contexto')
       .in('pedido', ids)
       .in('tipo', ['confirmacion', 'respuesta'])
-      .not('estado', 'in', '(rechazado,vencido)')
+      .not('estado', 'in', '(rechazado,vencido,atendido)')
       .order('actualizado_en', { ascending: false }),
     db
       .from('agente_eventos')
