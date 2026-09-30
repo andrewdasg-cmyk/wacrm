@@ -213,3 +213,26 @@ async function findOrCreateConversationRow(
 
   return newConv.id;
 }
+
+/**
+ * An existing conversation of this account, by id. For a contact Meta only
+ * knows by its WhatsApp username (BSUID, no phone): the public API cannot
+ * address it with `to`, but the send core reaches it through the
+ * conversation's contact (issue #519). Nothing is created.
+ */
+export async function resolveConversationById(
+  db: SupabaseClient,
+  accountId: string,
+  conversationId: string
+): Promise<ResolvedConversation> {
+  const { data } = await db
+    .from('conversations')
+    .select('id, contact_id')
+    .eq('id', conversationId)
+    .eq('account_id', accountId)
+    .maybeSingle();
+  if (!data) {
+    throw new SendMessageError('not_found', 'Conversation not found', 404);
+  }
+  return { conversationId: data.id, contactId: data.contact_id, contactCreated: false };
+}
