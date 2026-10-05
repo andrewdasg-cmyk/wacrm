@@ -49,6 +49,7 @@ const INTENCION: Record<string, string> = {
   dato: 'Agregó un dato',
   pregunta: 'Hizo una pregunta',
   cancela: 'Quiere cancelar',
+  pausa: 'Lo deja para después',
   otro: 'Escribió algo',
 }
 

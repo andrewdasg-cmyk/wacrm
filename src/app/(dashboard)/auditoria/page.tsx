@@ -739,6 +739,7 @@ const COLOR_INTENCION: Record<string, string> = {
   dato: "bg-amber-500/15 text-amber-600 dark:text-amber-300",
   pregunta: "bg-sky-500/15 text-sky-600 dark:text-sky-300",
   cancela: "bg-destructive/15 text-destructive",
+  pausa: "bg-sky-500/15 text-sky-600 dark:text-sky-300",
 };
 
 // Andrés settled the chat by hand: ask the agent to read it and draft the
