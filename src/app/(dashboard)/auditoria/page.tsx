@@ -69,7 +69,7 @@ const TIPO: Record<string, string> = {
   respuesta: "Respuesta del cliente",
   etapa: "Aviso ②③④",
   recordatorio: "Recordatorio (2do mensaje)",
-  llamar: "📞 Llamar",
+  llamar: "📞 LLAMAR: no contestó los 3 mensajes",
   ultimo_aviso: "⏳ Último aviso",
   cancelar: "❌ Cancelar en Dropi",
   novedad: "🚚 Novedad",
@@ -96,6 +96,8 @@ const ESTADO: Record<string, { texto: string; clase: string }> = {
 const ETIQUETAS: Record<string, string[]> = {
   velio_confirmacion_pedido: ["Saludo", "Cliente", "Oferta", "Valor", "Ciudad", "Dirección"],
   velio_confirmacion_dato: ["Saludo", "Cliente", "Oferta", "Valor", "Ciudad", "Dirección", "Pregunta"],
+  velio_confirmacion_pedido_v2: ["Saludo", "Cliente", "Oferta", "Valor", "Ciudad", "Dirección"],
+  velio_confirmacion_dato_v2: ["Saludo", "Cliente", "Oferta", "Valor", "Ciudad", "Dirección", "Pregunta"],
   velio_confirmacion_retiro: ["Saludo", "Cliente", "Oferta", "Valor", "Ciudad", "Transportadora", "Oficina"],
   velio_recordatorio_confirmacion: ["Saludo", "Cliente", "Producto", "Valor", "Dirección"],
   velio_recordatorio_dato: ["Saludo", "Cliente", "Producto", "Lo que falta"],
