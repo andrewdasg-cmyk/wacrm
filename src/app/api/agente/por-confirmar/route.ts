@@ -5,6 +5,7 @@ import { requireAgenteAccess } from '@/lib/agente/access'
 import {
   cambiosDelContexto,
   direccionPideRetiro,
+  esCambioDeRetiro,
   esCasoDeRetiro,
   otraTransportadora,
 } from '@/lib/agente/alertas'
@@ -91,7 +92,7 @@ export async function GET() {
     // message). A real answer to us still shows it (`respuestas`).
     db
       .from('agente_auditoria')
-      .select('pedido, tipo, estado, actualizado_en, contexto')
+      .select('pedido, tipo, estado, actualizado_en, contexto, mensaje_propuesto, plantilla_meta')
       .in('pedido', ids)
       .in('tipo', ['confirmacion', 'respuesta'])
       .not('estado', 'in', '(rechazado,vencido,atendido)')
@@ -197,14 +198,17 @@ export async function GET() {
     const clasif = (ctxCaso.clasificacion ?? detalleEv.clasificacion ?? null) as
       | { intencion?: string; resumen?: string }
       | null
-    const pide = cambiosDelContexto(ctxCaso)
+    const todos = cambiosDelContexto(ctxCaso)
+    const esRetiro =
+      oficinaDe.has(pedido) || direccionPideRetiro(r.direccion) || todos.some(esCambioDeRetiro)
+    // The pickup has its own box: it does not go twice.
+    const pide = todos.filter((c) => !esCambioDeRetiro(c))
     // A change the agent could not turn into data ("otro teléfono", a
     // product) still has to be applied in Dropi: its summary is the change.
     const cambios = [...pide]
     if (!cambios.length && (clasif?.intencion === 'cambio' || clasif?.intencion === 'dato') && clasif.resumen) {
       cambios.push(clasif.resumen)
     }
-    const esRetiro = oficinaDe.has(pedido) || direccionPideRetiro(r.direccion)
     const oficina = oficinaDe.get(pedido) ?? null
     const ultimoCliente = respuestas.at(-1)
     const ultimoNuestro = msgs.filter((m) => m.sender_type !== 'customer').at(-1)
@@ -231,6 +235,9 @@ export async function GET() {
         ? { oficina, otra_transportadora: otraTransportadora(oficina, r.transportadora) }
         : null,
       caso_estado: caso?.estado ?? null,
+      caso_tipo: caso?.tipo ?? null,
+      // Is there already a message drafted for this customer in the queue?
+      caso_tiene_mensaje: Boolean(caso && (caso.mensaje_propuesto || caso.plantilla_meta)),
       // Did we write after his last message? Otherwise he is waiting on us.
       le_respondimos: Boolean(
         ultimoCliente && ultimoNuestro && ultimoNuestro.created_at > ultimoCliente.created_at,

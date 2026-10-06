@@ -37,6 +37,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   cambiosDelContexto,
   direccionPideRetiro,
+  esCambioDeRetiro,
   esCasoDeRetiro,
   type RetiroAlerta,
 } from "@/lib/agente/alertas";
@@ -207,7 +208,15 @@ function Historial({ h }: { h: unknown }) {
 
 // What has to be changed in Dropi before confirming, big enough that it
 // cannot be missed (Andrés, 28/9). Confirming does not apply any of it.
-function AlertasDropi({ retiro, cambios }: { retiro: RetiroAlerta | null; cambios: string[] }) {
+function AlertasDropi({
+  retiro,
+  cambios,
+  grande = false,
+}: {
+  retiro: RetiroAlerta | null;
+  cambios: string[];
+  grande?: boolean;
+}) {
   if (!retiro && !cambios.length) return null;
   return (
     <div className="space-y-2">
@@ -217,7 +226,7 @@ function AlertasDropi({ retiro, cambios }: { retiro: RetiroAlerta | null; cambio
             <Building2 className="h-5 w-5 shrink-0" />
             RETIRO EN OFICINA
           </p>
-          <p className="mt-1.5 text-sm text-foreground">
+          <p className={cn("mt-1.5 text-foreground", grande ? "text-lg font-semibold" : "text-sm")}>
             Antes de confirmar, en Dropi déjelo como <strong>retiro en oficina</strong>
             {retiro.oficina ? (
               <>
@@ -229,7 +238,7 @@ function AlertasDropi({ retiro, cambios }: { retiro: RetiroAlerta | null; cambio
             .
           </p>
           {retiro.otra_transportadora ? (
-            <p className="mt-1.5 text-sm font-semibold text-destructive">
+            <p className={cn("mt-1.5 font-semibold text-destructive", grande ? "text-lg" : "text-sm")}>
               En Dropi va con {retiro.otra_transportadora}: cámbiele la transportadora.
             </p>
           ) : null}
@@ -241,9 +250,9 @@ function AlertasDropi({ retiro, cambios }: { retiro: RetiroAlerta | null; cambio
             <PencilLine className="h-5 w-5 shrink-0" />
             CAMBIOS POR APLICAR EN DROPI
           </p>
-          <ul className="mt-1.5 space-y-1 text-sm">
+          <ul className={cn("mt-1.5 space-y-1", grande ? "text-lg" : "text-sm")}>
             {cambios.map((c, i) => (
-              <li key={i} className="font-medium text-foreground">
+              <li key={i} className={cn("text-foreground", grande ? "font-bold" : "font-medium")}>
                 • {c}
               </li>
             ))}
@@ -400,8 +409,15 @@ function Tarjeta({ caso, alCambiar }: { caso: Caso; alCambiar: () => void }) {
       (caso.tipo === "confirmacion" && direccionPideRetiro(texto(ctx.direccion_dropi))))
       ? { oficina: ctx.oficina ? texto(ctx.oficina) : null, otra_transportadora: null }
       : null;
-  const cambios = caso.tipo === "confirmacion" ? cambiosDelContexto(ctx) : [];
+  const esConfirmacion = caso.tipo === "confirmacion";
+  const cambios = esConfirmacion ? cambiosDelContexto(ctx).filter((c) => !(retiro && esCambioDeRetiro(c))) : [];
   const conAlerta = Boolean(retiro || cambios.length);
+  // A confirmation with changes only SENDS the message: Andrés edits the
+  // order and confirms it in Dropi himself (6/10). Without changes, approving
+  // confirms it in Dropi. The button says which of the two it does.
+  const soloMensaje = esConfirmacion && (ctx.solo_mensaje === true || conAlerta);
+  // The tick "ya lo dejé así en Dropi" is only for a pickup first contact.
+  const pideMarca = conAlerta && !esConfirmacion;
   const [enDropi, setEnDropi] = useState(false);
 
   const actuar = useCallback(
@@ -579,7 +595,19 @@ function Tarjeta({ caso, alCambiar }: { caso: Caso; alCambiar: () => void }) {
             </div>
           ) : (
             <div className="space-y-2">
-            {conAlerta && tieneMensaje ? (
+            {esConfirmacion && tieneMensaje ? (
+              <p
+                className={cn(
+                  "rounded-lg border-2 p-3 text-sm font-semibold text-foreground",
+                  soloMensaje ? "border-red-500 bg-red-500/10" : "border-emerald-500/60 bg-emerald-500/10",
+                )}
+              >
+                {soloMensaje
+                  ? "CON CAMBIOS: al aprobar SOLO se envía este mensaje al cliente. El agente NO confirma el pedido en Dropi. Haga el cambio y confírmelo usted (pestaña «Confirmar en Dropi»)."
+                  : "SIN CAMBIOS: al aprobar, el agente confirma el pedido en Dropi y le envía este mensaje al cliente."}
+              </p>
+            ) : null}
+            {pideMarca && tieneMensaje ? (
               <label className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-border bg-muted/40 p-3 text-sm font-medium text-foreground">
                 <Checkbox checked={enDropi} onCheckedChange={(v) => setEnDropi(Boolean(v))} />
                 Ya lo dejé así en Dropi
@@ -589,7 +617,7 @@ function Tarjeta({ caso, alCambiar }: { caso: Caso; alCambiar: () => void }) {
               {tieneMensaje ? (
                 <Button
                   size="sm"
-                  disabled={!!ocupado || (conAlerta && !enDropi)}
+                  disabled={!!ocupado || (pideMarca && !enDropi)}
                   onClick={() => actuar(caso.estado === "error" ? "reintentar" : "aprobar")}
                 >
                   {ocupado === "aprobar" || ocupado === "reintentar" ? (
@@ -597,7 +625,15 @@ function Tarjeta({ caso, alCambiar }: { caso: Caso; alCambiar: () => void }) {
                   ) : (
                     <Check />
                   )}
-                  {caso.estado === "error" ? "Reintentar" : "Aprobar y enviar"}
+                  {caso.estado === "error"
+                    ? "Reintentar"
+                    : esConfirmacion
+                      ? soloMensaje
+                        ? "Aprobar: solo envía el mensaje"
+                        : "Aprobar: confirma en Dropi y envía"
+                      : caso.tipo === "carrito_crear"
+                        ? "Aprobar: crea el pedido y envía"
+                        : "Aprobar y enviar"}
                 </Button>
               ) : (
                 <Button size="sm" disabled={!!ocupado} onClick={() => actuar("atendido")}>
@@ -727,6 +763,8 @@ interface PedidoPorConfirmar {
   cambios: string[];
   retiro: RetiroAlerta | null;
   caso_estado: string | null;
+  caso_tipo: string | null;
+  caso_tiene_mensaje: boolean;
   le_respondimos: boolean;
   ultimo_mensaje: string | null;
   conversacion: string | null;
@@ -810,7 +848,7 @@ function QuitarDeLista({ pedido, onQuitado }: { pedido: string; onQuitado: () =>
 
 // Orders the customer already answered in the chat but that are still
 // "Por confirmar" in Dropi: what Andrés has left to confirm or fix there.
-function PorConfirmar({ recarga }: { recarga: number }) {
+function PorConfirmar({ recarga, irARevisar }: { recarga: number; irARevisar: () => void }) {
   const [pedidos, setPedidos] = useState<PedidoPorConfirmar[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -853,11 +891,32 @@ function PorConfirmar({ recarga }: { recarga: number }) {
       </div>
     );
 
-  // The ones with something to fix in Dropi go first.
+  // Two lists (Andrés, 6/10). With something to change in Dropi: he edits
+  // the order and confirms it himself, the agent never does. Without
+  // changes: approving its confirmation in "Por revisar" confirms it.
   const conAlerta = (p: PedidoPorConfirmar) => Boolean(p.retiro || p.cambios.length);
-  const ordenados = [...pedidos].sort((a, b) => Number(conAlerta(b)) - Number(conAlerta(a)));
-  const retiros = pedidos.filter((p) => p.retiro).length;
-  const conCambios = pedidos.filter((p) => p.cambios.length).length;
+  // Is its message already drafted (waiting in "Por revisar"), or sent?
+  const armada = (p: PedidoPorConfirmar) =>
+    p.caso_tiene_mensaje && ["pendiente", "con_nota", "aprobado", "enviando", "error"].includes(p.caso_estado ?? "");
+  const enviada = (p: PedidoPorConfirmar) => p.caso_tiene_mensaje && p.caso_estado === "enviado";
+  const grupos = [
+    {
+      clave: "cambios",
+      titulo: "HAY QUE CAMBIAR EN DROPI",
+      ayuda:
+        "Haga el cambio en Dropi y confirme usted el pedido. El agente NO confirma estos, aunque apruebe el mensaje para el cliente.",
+      clase: "border-red-500 bg-red-500/10",
+      lista: pedidos.filter(conAlerta),
+    },
+    {
+      clave: "limpios",
+      titulo: "SIN CAMBIOS: SOLO FALTA CONFIRMAR",
+      ayuda:
+        "El agente los confirma en Dropi cuando usted aprueba su confirmación en «Por revisar». También puede confirmarlos usted directamente.",
+      clase: "border-emerald-500/60 bg-emerald-500/10",
+      lista: pedidos.filter((p) => !conAlerta(p)),
+    },
+  ].filter((g) => g.lista.length);
 
   return (
     <div className="space-y-3">
@@ -865,21 +924,18 @@ function PorConfirmar({ recarga }: { recarga: number }) {
         {pedidos.length} pedido{pedidos.length === 1 ? "" : "s"} siguen «Por confirmar» en Dropi y el cliente ya
         respondió en el chat.
       </p>
-      {retiros || conCambios ? (
-        <div className="flex items-start gap-2 rounded-lg border-2 border-orange-500 bg-orange-500/10 p-3 text-sm font-semibold text-foreground">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-orange-600 dark:text-orange-300" />
-          <span>
-            {[
-              retiros ? `${retiros} retiro${retiros === 1 ? "" : "s"} en oficina` : "",
-              conCambios ? `${conCambios} con cambios por aplicar` : "",
-            ]
-              .filter(Boolean)
-              .join(" · ")}
-            : arréglelos en Dropi antes de confirmar. Van primero en la lista.
-          </span>
-        </div>
-      ) : null}
-      {ordenados.map((p) => (
+      {grupos.map((g) => (
+        <div key={g.clave} className="space-y-3">
+          <div className={cn("flex items-start gap-2 rounded-lg border-2 p-3 text-foreground", g.clase)}>
+            <AlertTriangle className="mt-1 h-5 w-5 shrink-0" />
+            <div>
+              <p className="text-lg font-bold tracking-wide">
+                {g.titulo} ({g.lista.length})
+              </p>
+              <p className="text-sm font-medium">{g.ayuda}</p>
+            </div>
+          </div>
+      {g.lista.map((p) => (
         <div
           key={p.pedido}
           className={cn(
@@ -918,7 +974,14 @@ function PorConfirmar({ recarga }: { recarga: number }) {
                   Abrir chat
                 </a>
               ) : null}
-              <ArmarConfirmacion pedido={p.pedido} />
+              {armada(p) ? (
+                <Button size="sm" variant="outline" onClick={irARevisar} className="h-auto py-1 text-xs">
+                  <ClipboardCheck />
+                  Ya está armada: ver en «Por revisar»
+                </Button>
+              ) : enviada(p) ? null : (
+                <ArmarConfirmacion pedido={p.pedido} />
+              )}
               <QuitarDeLista
                 pedido={p.pedido}
                 onQuitado={() => setPedidos((lista) => (lista ?? []).filter((x) => x.pedido !== p.pedido))}
@@ -926,7 +989,7 @@ function PorConfirmar({ recarga }: { recarga: number }) {
             </div>
           </div>
 
-          <AlertasDropi retiro={p.retiro} cambios={p.cambios} />
+          <AlertasDropi retiro={p.retiro} cambios={p.cambios} grande />
 
           {/* What the customer said, when it is not already a change above. */}
           {p.resumen && !p.cambios.includes(p.resumen) ? (
@@ -939,13 +1002,28 @@ function PorConfirmar({ recarga }: { recarga: number }) {
           <Mensajes lista={p.mensajes} />
           <Conversacion telefono={p.telefono} />
 
-          <p className="text-xs text-muted-foreground">
-            {p.caso_estado === "pendiente" || p.caso_estado === "con_nota"
-              ? "Su respuesta espera en «Por revisar»."
-              : p.le_respondimos
-                ? "Ya le respondimos: falta confirmarlo en Dropi."
-                : "Todavía no le hemos contestado su último mensaje."}
+          <p className="text-sm font-medium text-foreground">
+            {conAlerta(p)
+              ? "Lo confirma usted en Dropi, después de hacer el cambio. "
+              : armada(p)
+                ? "Al aprobar su confirmación en «Por revisar», el agente lo confirma en Dropi. "
+                : ""}
+            <span className="font-normal text-muted-foreground">
+              {armada(p)
+                ? conAlerta(p)
+                  ? "El mensaje para el cliente ya está armado en «Por revisar»: aprobarlo solo lo envía."
+                  : "El mensaje para el cliente ya está armado."
+                : enviada(p)
+                  ? "El mensaje de confirmación ya se le envió al cliente: solo falta Dropi."
+                  : p.caso_estado === "pendiente" || p.caso_estado === "con_nota"
+                    ? "Su respuesta espera en «Por revisar», todavía sin mensaje."
+                    : p.le_respondimos
+                      ? "Ya le respondimos en el chat. Con «Armar confirmación» el agente le prepara el mensaje final."
+                      : "Todavía no le hemos contestado su último mensaje."}
+            </span>
           </p>
+        </div>
+      ))}
         </div>
       ))}
     </div>
@@ -1030,7 +1108,13 @@ export default function AuditoriaPage() {
       <AvisoAgente />
 
       {vista === "dropi" ? (
-        <PorConfirmar recarga={recarga} />
+        <PorConfirmar
+          recarga={recarga}
+          irARevisar={() => {
+            setCasos(null);
+            setVista("abiertos");
+          }}
+        />
       ) : error ? (
         <p className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{error}</p>
       ) : casos === null ? (

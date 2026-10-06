@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   cambiosDelContexto,
   direccionPideRetiro,
+  esCambioDeRetiro,
   esCasoDeRetiro,
   otraTransportadora,
 } from './alertas'
@@ -53,5 +54,12 @@ describe('cambiosDelContexto', () => {
     ])
     expect(cambiosDelContexto({})).toEqual([])
     expect(cambiosDelContexto(null)).toEqual([])
+  })
+
+  it("prefers the agent's own list when the case has it", () => {
+    const lista = ['Cambiar la dirección a: Calle 9 #1-20', 'Dejarlo como RETIRO EN OFICINA: Inter Rapidísimo — Oficina principal de Pacho']
+    expect(cambiosDelContexto({ cambios_dropi: lista, direccion_nueva: 'otra' })).toEqual(lista)
+    expect(cambiosDelContexto({ cambios_dropi: [], combos: 2 })).toEqual(['Cambiar la cantidad a 4 unidades'])
+    expect(lista.filter((c) => !esCambioDeRetiro(c))).toEqual(['Cambiar la dirección a: Calle 9 #1-20'])
   })
 })

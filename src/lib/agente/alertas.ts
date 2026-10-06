@@ -54,10 +54,22 @@ export function otraTransportadora(oficina: string | null, transportadoraDropi: 
   return clave(deOficina) === clave(enDropi) ? null : enDropi
 }
 
-// The changes the agent read in the chat, as the audit case stores them.
+// A pickup written as one more change ("Dejarlo como RETIRO EN OFICINA: …"):
+// the pages that already show the orange pickup box leave it out of the list.
+export const esCambioDeRetiro = (cambio: string) => cambio.startsWith('Dejarlo como RETIRO')
+
+// The changes Andrés has to apply in Dropi, as the audit case stores them.
+// A confirmation carries the agent's own list (`cambios_dropi`, written by
+// acciones.sellar); older cases and customer replies only have the fields.
 export function cambiosDelContexto(contexto: Record<string, unknown> | null | undefined): string[] {
   const ctx = contexto ?? {}
+  if (Array.isArray(ctx.cambios_dropi) && ctx.cambios_dropi.length) {
+    return ctx.cambios_dropi.filter((c): c is string => typeof c === 'string' && c.trim() !== '')
+  }
   const cambios: string[] = []
+  if (typeof ctx.unidades !== 'number' && typeof ctx.combos === 'number' && ctx.combos > 0) {
+    cambios.push(`Cambiar la cantidad a ${ctx.combos * 2} unidades`)
+  }
   if (typeof ctx.unidades === 'number') {
     const valor =
       typeof ctx.valor_nuevo === 'number' ? ` por $${ctx.valor_nuevo.toLocaleString('es-CO')}` : ''
