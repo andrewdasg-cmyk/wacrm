@@ -56,6 +56,8 @@ const INTENCION: Record<string, string> = {
 
 /** agente_eventos.tipo of "Quitar de la lista". */
 const QUITADO = 'confirmar_quitado'
+/** agente_eventos.tipo of "Cambios hechos y pedido confirmado" / "Ya lo confirmé en Dropi". */
+const HECHO = 'confirmar_hecho'
 
 const ultimos10 = (t?: string) => (t ?? '').replace(/\D/g, '').slice(-10)
 
@@ -85,7 +87,7 @@ export async function GET() {
   const ids = pedidos.map(([p]) => p)
   const telefonos = [...new Set(pedidos.map(([, r]) => ultimos10(r.telefono)))]
 
-  const [casos, eventos, contactos, casosRetiro, quitados] = await Promise.all([
+  const [casos, eventos, contactos, casosRetiro, quitados, hechos, sincronizado] = await Promise.all([
     // A case Andrés rejected, marked as handled, or that expired does not
     // keep the order here (Hugo Acosta, 29/9: only the ad's auto-message;
     // Nelson Umbarila, 30/9: only the Releasit summary, before our first
@@ -122,7 +124,25 @@ export async function GET() {
       .in('pedido', ids)
       .eq('tipo', QUITADO)
       .order('creado_en', { ascending: false }),
+    // "Cambios hechos y pedido confirmado" (POST below).
+    db
+      .from('agente_eventos')
+      .select('pedido, creado_en')
+      .in('pedido', ids)
+      .eq('tipo', HECHO)
+      .order('creado_en', { ascending: false }),
+    // When did the agent last read Dropi? An order marked as done before
+    // that and still "Por confirmar" was not really confirmed.
+    db
+      .from('agente_eventos')
+      .select('creado_en')
+      .eq('tipo', 'sincronizado')
+      .order('creado_en', { ascending: false })
+      .limit(1),
   ])
+  const hechoEn = new Map<string, string>()
+  for (const h of hechos.data ?? []) if (h.pedido && !hechoEn.has(h.pedido)) hechoEn.set(h.pedido, h.creado_en)
+  const ultimaSync = sincronizado.data?.[0]?.creado_en ? new Date(sincronizado.data[0].creado_en).getTime() : 0
   const quitadoEn = new Map<string, string>()
   for (const q of quitados.data ?? []) if (q.pedido && !quitadoEn.has(q.pedido)) quitadoEn.set(q.pedido, q.creado_en)
 
@@ -215,6 +235,11 @@ export async function GET() {
     // Removed by hand: it comes back only if the customer writes again.
     const quitado = quitadoEn.get(pedido)
     if (quitado && (!ultimoCliente || new Date(ultimoCliente.created_at) <= new Date(quitado))) continue
+    // Marked as done: hidden until the agent reads Dropi again. If Dropi
+    // still has it "Por confirmar" after that read, it comes back, in red.
+    const hecho = hechoEn.get(pedido) ?? null
+    const leidoDespues = hecho ? ultimaSync > new Date(hecho).getTime() + 60_000 : false
+    if (hecho && !leidoDespues) continue
 
     salida.push({
       pedido,
@@ -234,6 +259,8 @@ export async function GET() {
       retiro: esRetiro
         ? { oficina, otra_transportadora: otraTransportadora(oficina, r.transportadora) }
         : null,
+      // He said it was done, and Dropi still shows it unconfirmed.
+      hecho_sin_confirmar: hecho,
       caso_estado: caso?.estado ?? null,
       caso_tipo: caso?.tipo ?? null,
       // Is there already a message drafted for this customer in the queue?
@@ -268,21 +295,33 @@ export async function POST(request: Request) {
   } catch (err) {
     return toErrorResponse(err)
   }
-  const body = (await request.json().catch(() => null)) as { pedido?: unknown } | null
+  const body = (await request.json().catch(() => null)) as
+    | { pedido?: unknown; hecho?: unknown; armar?: unknown }
+    | null
   const pedido = typeof body?.pedido === 'string' ? body.pedido.trim() : ''
   if (!/^\d{5,12}$/.test(pedido)) {
     return NextResponse.json({ error: 'Número de pedido inválido' }, { status: 400 })
   }
-  const { error } = await supabaseAdmin()
-    .from('agente_tareas')
-    .insert({
-      clave: `armar:${pedido}:${Date.now()}`,
-      tipo: 'armar_confirmacion',
-      ejecutar_en: new Date().toISOString(),
-      datos: { pedido },
-    })
+  const db = supabaseAdmin()
+  // "Cambios hechos y pedido confirmado": Andrés already edited and
+  // confirmed the order in Dropi. The card goes away, and if the customer
+  // has no confirmation message yet (`armar`), the agent drafts it.
+  const hecho = body?.hecho === true
+  if (hecho) {
+    const { error } = await db
+      .from('agente_eventos')
+      .insert({ tipo: HECHO, pedido, detalle: { por: 'Andres (Confirmar en Dropi)' } })
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    if (body?.armar !== true) return NextResponse.json({ ok: true, armada: false })
+  }
+  const { error } = await db.from('agente_tareas').insert({
+    clave: `armar:${pedido}:${Date.now()}`,
+    tipo: 'armar_confirmacion',
+    ejecutar_en: new Date().toISOString(),
+    datos: hecho ? { pedido, hecho: true } : { pedido },
+  })
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ ok: true })
+  return NextResponse.json({ ok: true, armada: true })
 }
 
 // DELETE /api/agente/por-confirmar  { pedido }

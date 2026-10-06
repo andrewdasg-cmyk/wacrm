@@ -416,6 +416,10 @@ function Tarjeta({ caso, alCambiar }: { caso: Caso; alCambiar: () => void }) {
   // order and confirms it in Dropi himself (6/10). Without changes, approving
   // confirms it in Dropi. The button says which of the two it does.
   const soloMensaje = esConfirmacion && (ctx.solo_mensaje === true || conAlerta);
+  // The agent's own draft for a customer who asked for a change (a
+  // `respuesta` with the new address or quantity) is the same kind of
+  // message: it only goes to the customer, and Dropi is his.
+  const respuestaConCambios = caso.tipo === "respuesta" && cambiosDelContexto(ctx).length > 0;
   // The tick "ya lo dejé así en Dropi" is only for a pickup first contact.
   const pideMarca = conAlerta && !esConfirmacion;
   const [enDropi, setEnDropi] = useState(false);
@@ -595,16 +599,20 @@ function Tarjeta({ caso, alCambiar }: { caso: Caso; alCambiar: () => void }) {
             </div>
           ) : (
             <div className="space-y-2">
-            {esConfirmacion && tieneMensaje ? (
+            {(esConfirmacion || respuestaConCambios) && tieneMensaje ? (
               <p
                 className={cn(
                   "rounded-lg border-2 p-3 text-sm font-semibold text-foreground",
-                  soloMensaje ? "border-red-500 bg-red-500/10" : "border-emerald-500/60 bg-emerald-500/10",
+                  soloMensaje || respuestaConCambios
+                    ? "border-red-500 bg-red-500/10"
+                    : "border-emerald-500/60 bg-emerald-500/10",
                 )}
               >
-                {soloMensaje
-                  ? "CON CAMBIOS: al aprobar SOLO se envía este mensaje al cliente. El agente NO confirma el pedido en Dropi. Haga el cambio y confírmelo usted (pestaña «Confirmar en Dropi»)."
-                  : "SIN CAMBIOS: al aprobar, el agente confirma el pedido en Dropi y le envía este mensaje al cliente."}
+                {ctx.hecho_en_dropi === true
+                  ? "Ya lo dejó hecho y confirmado en Dropi: al aprobar SOLO se envía este mensaje al cliente."
+                  : soloMensaje || respuestaConCambios
+                    ? "CON CAMBIOS: al aprobar SOLO se envía este mensaje al cliente. El agente NO confirma el pedido en Dropi. Haga el cambio, confírmelo usted y márquelo en la pestaña «Confirmar en Dropi»."
+                    : "SIN CAMBIOS: al aprobar, el agente confirma el pedido en Dropi y le envía este mensaje al cliente."}
               </p>
             ) : null}
             {pideMarca && tieneMensaje ? (
@@ -631,7 +639,9 @@ function Tarjeta({ caso, alCambiar }: { caso: Caso; alCambiar: () => void }) {
                       ? soloMensaje
                         ? "Aprobar: solo envía el mensaje"
                         : "Aprobar: confirma en Dropi y envía"
-                      : caso.tipo === "carrito_crear"
+                      : respuestaConCambios
+                        ? "Aprobar: solo envía el mensaje"
+                        : caso.tipo === "carrito_crear"
                         ? "Aprobar: crea el pedido y envía"
                         : "Aprobar y enviar"}
                 </Button>
@@ -765,6 +775,7 @@ interface PedidoPorConfirmar {
   caso_estado: string | null;
   caso_tipo: string | null;
   caso_tiene_mensaje: boolean;
+  hecho_sin_confirmar: string | null;
   le_respondimos: boolean;
   ultimo_mensaje: string | null;
   conversacion: string | null;
@@ -809,6 +820,54 @@ function ArmarConfirmacion({ pedido }: { pedido: string }) {
     <Button size="sm" variant="outline" disabled={estado !== "listo"} onClick={pedir} className="h-auto py-1 text-xs">
       {estado === "enviando" ? <Loader2 className="animate-spin" /> : <Check />}
       {estado === "pedido" ? "Pedida" : "Armar confirmación"}
+    </Button>
+  );
+}
+
+// "Cambios hechos y pedido confirmado": Andrés already edited the order and
+// confirmed it in Dropi. The card goes away, and if the customer has no
+// confirmation message yet, the agent drafts it for "Por revisar" (6/10).
+function PedidoHecho({
+  pedido,
+  conCambios,
+  armar,
+  onHecho,
+}: {
+  pedido: string;
+  conCambios: boolean;
+  armar: boolean;
+  onHecho: () => void;
+}) {
+  const [enviando, setEnviando] = useState(false);
+  const marcar = async () => {
+    setEnviando(true);
+    try {
+      const res = await fetch("/api/agente/por-confirmar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pedido, hecho: true, armar }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data.error ?? "No se pudo guardar");
+        setEnviando(false);
+        return;
+      }
+      toast.success(
+        armar
+          ? "Listo. El agente arma el mensaje para el cliente: lo verá en «Por revisar»."
+          : "Listo. Sale de esta lista.",
+      );
+      onHecho();
+    } catch {
+      toast.error("No se pudo guardar");
+      setEnviando(false);
+    }
+  };
+  return (
+    <Button disabled={enviando} onClick={marcar} className="w-full bg-emerald-600 text-white hover:bg-emerald-700">
+      {enviando ? <Loader2 className="animate-spin" /> : <Check />}
+      {conCambios ? "Cambios hechos y pedido confirmado" : "Ya lo confirmé en Dropi"}
     </Button>
   );
 }
@@ -989,6 +1048,13 @@ function PorConfirmar({ recarga, irARevisar }: { recarga: number; irARevisar: ()
             </div>
           </div>
 
+          {p.hecho_sin_confirmar ? (
+            <p className="rounded-lg border-2 border-red-500 bg-red-500/10 p-3 text-sm font-semibold text-foreground">
+              Usted lo marcó como hecho{" "}
+              {formatDistanceToNow(new Date(p.hecho_sin_confirmar), { addSuffix: true, locale: es })}, pero Dropi
+              lo sigue mostrando sin confirmar. Revíselo en Dropi.
+            </p>
+          ) : null}
           <AlertasDropi retiro={p.retiro} cambios={p.cambios} grande />
 
           {/* What the customer said, when it is not already a change above. */}
@@ -1002,6 +1068,12 @@ function PorConfirmar({ recarga, irARevisar }: { recarga: number; irARevisar: ()
           <Mensajes lista={p.mensajes} />
           <Conversacion telefono={p.telefono} />
 
+          <PedidoHecho
+            pedido={p.pedido}
+            conCambios={conAlerta(p)}
+            armar={!armada(p) && !enviada(p)}
+            onHecho={() => setPedidos((lista) => (lista ?? []).filter((x) => x.pedido !== p.pedido))}
+          />
           <p className="text-sm font-medium text-foreground">
             {conAlerta(p)
               ? "Lo confirma usted en Dropi, después de hacer el cambio. "
