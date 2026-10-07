@@ -58,6 +58,8 @@ const INTENCION: Record<string, string> = {
 const QUITADO = 'confirmar_quitado'
 /** agente_eventos.tipo of "Cambios hechos y pedido confirmado" / "Ya lo confirmé en Dropi". */
 const HECHO = 'confirmar_hecho'
+/** agente_eventos.tipo the agent logs when IT confirms the order in Dropi. */
+const CONFIRMO_AGENTE = 'confirmado_en_dropi'
 
 const ultimos10 = (t?: string) => (t ?? '').replace(/\D/g, '').slice(-10)
 
@@ -124,12 +126,15 @@ export async function GET() {
       .in('pedido', ids)
       .eq('tipo', QUITADO)
       .order('creado_en', { ascending: false }),
-    // "Cambios hechos y pedido confirmado" (POST below).
+    // "Cambios hechos y pedido confirmado" (POST below), and the orders the
+    // agent itself confirmed in Dropi: the mirror still says "Por confirmar"
+    // until the next Dropi read, ~10 minutes (7/10, order 92321553: it
+    // showed up here right after the agent had confirmed it).
     db
       .from('agente_eventos')
-      .select('pedido, creado_en')
+      .select('pedido, creado_en, tipo')
       .in('pedido', ids)
-      .eq('tipo', HECHO)
+      .in('tipo', [HECHO, CONFIRMO_AGENTE])
       .order('creado_en', { ascending: false }),
     // When did the agent last read Dropi? An order marked as done before
     // that and still "Por confirmar" was not really confirmed.
@@ -141,7 +146,12 @@ export async function GET() {
       .limit(1),
   ])
   const hechoEn = new Map<string, string>()
-  for (const h of hechos.data ?? []) if (h.pedido && !hechoEn.has(h.pedido)) hechoEn.set(h.pedido, h.creado_en)
+  const hechoPorAgente = new Set<string>()
+  for (const h of hechos.data ?? []) {
+    if (!h.pedido || hechoEn.has(h.pedido)) continue
+    hechoEn.set(h.pedido, h.creado_en)
+    if (h.tipo === CONFIRMO_AGENTE) hechoPorAgente.add(h.pedido)
+  }
   const ultimaSync = sincronizado.data?.[0]?.creado_en ? new Date(sincronizado.data[0].creado_en).getTime() : 0
   const quitadoEn = new Map<string, string>()
   for (const q of quitados.data ?? []) if (q.pedido && !quitadoEn.has(q.pedido)) quitadoEn.set(q.pedido, q.creado_en)
@@ -261,6 +271,7 @@ export async function GET() {
         : null,
       // He said it was done, and Dropi still shows it unconfirmed.
       hecho_sin_confirmar: hecho,
+      hecho_por_agente: hechoPorAgente.has(pedido),
       caso_estado: caso?.estado ?? null,
       caso_tipo: caso?.tipo ?? null,
       // Is there already a message drafted for this customer in the queue?

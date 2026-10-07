@@ -468,7 +468,11 @@ function Tarjeta({ caso, alCambiar }: { caso: Caso; alCambiar: () => void }) {
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="font-semibold text-foreground">{caso.cliente || caso.telefono}</h2>
-            <Badge variant="outline">{TIPO[caso.tipo] ?? caso.tipo}</Badge>
+            <Badge variant="outline">
+              {caso.tipo === "llamar" && ctx.mensaje_fallido
+                ? "📵 LLAMAR: el mensaje no le llegó"
+                : (TIPO[caso.tipo] ?? caso.tipo)}
+            </Badge>
             {ctx.tienda ? <Badge variant="secondary">{texto(ctx.tienda)}</Badge> : null}
             {ctx.linea ? (
               <Badge variant="outline">
@@ -778,6 +782,7 @@ interface PedidoPorConfirmar {
   caso_tipo: string | null;
   caso_tiene_mensaje: boolean;
   hecho_sin_confirmar: string | null;
+  hecho_por_agente?: boolean;
   le_respondimos: boolean;
   ultimo_mensaje: string | null;
   conversacion: string | null;
@@ -1052,7 +1057,7 @@ function PorConfirmar({ recarga, irARevisar }: { recarga: number; irARevisar: ()
 
           {p.hecho_sin_confirmar ? (
             <p className="rounded-lg border-2 border-red-500 bg-red-500/10 p-3 text-sm font-semibold text-foreground">
-              Usted lo marcó como hecho{" "}
+              {p.hecho_por_agente ? "El agente lo confirmó en Dropi" : "Usted lo marcó como hecho"}{" "}
               {formatDistanceToNow(new Date(p.hecho_sin_confirmar), { addSuffix: true, locale: es })}, pero Dropi
               lo sigue mostrando sin confirmar. Revíselo en Dropi.
             </p>
