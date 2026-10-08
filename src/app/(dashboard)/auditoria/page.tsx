@@ -70,6 +70,7 @@ const TIPO: Record<string, string> = {
   etapa: "Aviso ②③④",
   recordatorio: "Recordatorio (2do mensaje)",
   llamar: "📞 LLAMAR: no contestó los 3 mensajes",
+  retiro: "🏢 Recordatorio: retiro en oficina sin reclamar",
   ultimo_aviso: "⏳ Último aviso",
   cancelar: "❌ Cancelar en Dropi",
   novedad: "🚚 Novedad",
@@ -109,6 +110,8 @@ const ETIQUETAS: Record<string, string[]> = {
   velio_guia_primer_contacto: ["Saludo", "Cliente", "Oferta", "Valor", "Dirección", "Guía", "Transportadora", "Seguimiento", "Despacho"],
   velio_llego_a_su_ciudad: ["Saludo", "Cliente", "Producto", "Ciudad", "Valor"],
   velio_retiro_aviso: ["Saludo", "Cliente", "# pedido", "Producto", "Ciudad", "Transportadora"],
+  velio_retiro_recordatorio: ["Saludo", "Cliente", "# pedido", "Producto", "Ciudad", "Transportadora"],
+  velio_retiro_pendiente: ["Saludo", "Cliente", "# pedido", "Producto", "Ciudad", "Transportadora"],
   velio_en_reparto: ["Saludo", "Cliente", "Producto", "Valor"],
   velio_retiro_en_camino: ["Saludo", "Cliente", "Producto", "Transportadora", "Ciudad", "Guía", "Seguimiento", "Valor"],
 };
