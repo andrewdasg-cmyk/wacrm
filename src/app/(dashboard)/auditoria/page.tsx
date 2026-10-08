@@ -117,6 +117,17 @@ function texto(v: unknown): string {
   return typeof v === "string" ? v : v == null ? "" : String(v);
 }
 
+/** The 10-digit Colombian number of a contact ("573208624564" → "3208624564"). */
+function telefonoCorto(telefono: string | null | undefined): string {
+  return (telefono ?? "").replace(/\D/g, "").slice(-10);
+}
+
+/** "320 862 4564": easier to dial from the call alert. */
+function telefonoLegible(telefono: string | null | undefined): string {
+  const t = telefonoCorto(telefono);
+  return t.length === 10 ? `${t.slice(0, 3)} ${t.slice(3, 6)} ${t.slice(6)}` : (telefono ?? "");
+}
+
 function Fila({ etiqueta, valor }: { etiqueta: string; valor: unknown }) {
   const t = texto(valor);
   if (!t) return null;
@@ -492,6 +503,35 @@ function Tarjeta({ caso, alCambiar }: { caso: Caso; alCambiar: () => void }) {
       </div>
 
       {abierto ? <AlertasDropi retiro={retiro} cambios={cambios} /> : null}
+
+      {/* A call alert has no message to read: say in big type what to do,
+          to whom and why (Andrés, 8/10). */}
+      {abierto && (caso.tipo === "llamar" || Boolean(ctx.mensaje_fallido)) ? (
+        <div className="space-y-2 rounded-xl border-2 border-red-500 bg-red-500/10 p-4">
+          <p className="text-2xl font-extrabold leading-tight text-foreground sm:text-3xl">
+            {caso.tipo !== "llamar"
+              ? "📵 NO LE LLEGÓ NUESTRO MENSAJE"
+              : ctx.mensaje_fallido
+                ? "📵 LLAMAR: NO LE LLEGÓ EL MENSAJE"
+                : "📞 LLAMAR: NO CONTESTÓ LOS 3 MENSAJES"}
+          </p>
+          <p className="text-xl font-bold text-foreground sm:text-2xl">
+            {caso.cliente || "Cliente"} ·{" "}
+            <a className="underline decoration-2 underline-offset-4" href={`tel:+57${telefonoCorto(caso.telefono)}`}>
+              {telefonoLegible(caso.telefono)}
+            </a>
+          </p>
+          {caso.motivos?.[0] ? (
+            <p className="text-base font-medium text-foreground sm:text-lg">{caso.motivos[0]}</p>
+          ) : null}
+          <p className="text-sm text-muted-foreground">
+            Pedido {caso.pedido ?? "?"}
+            {caso.tipo === "llamar"
+              ? " · Si confirma, déjelo listo en Dropi; si no contesta o ya no lo quiere, cancélelo. Luego marque «Ya lo atendí»."
+              : " · Mire el chat y marque «Ya lo atendí»."}
+          </p>
+        </div>
+      ) : null}
 
       {caso.motivos?.length ? (
         <ul className="space-y-1 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
