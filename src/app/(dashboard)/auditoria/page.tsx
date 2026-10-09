@@ -111,6 +111,7 @@ const ETIQUETAS: Record<string, string[]> = {
   velio_llego_a_su_ciudad: ["Saludo", "Cliente", "Producto", "Ciudad", "Valor"],
   velio_retiro_aviso: ["Saludo", "Cliente", "# pedido", "Producto", "Ciudad", "Transportadora"],
   velio_retiro_recordatorio: ["Saludo", "Cliente", "# pedido", "Producto", "Ciudad", "Transportadora"],
+  velio_pedido_confirmado: ["Saludo", "Cliente", "Oferta", "Dirección", "Valor"],
   velio_retiro_pendiente: ["Saludo", "Cliente", "# pedido", "Producto", "Ciudad", "Transportadora"],
   velio_en_reparto: ["Saludo", "Cliente", "Producto", "Valor"],
   velio_retiro_en_camino: ["Saludo", "Cliente", "Producto", "Transportadora", "Ciudad", "Guía", "Seguimiento", "Valor"],
