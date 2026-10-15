@@ -744,7 +744,10 @@ function AvisoAgente() {
         })
         .catch(() => {});
     cargar();
-    const t = setInterval(cargar, 60000);
+    // A tab nobody is looking at does not ask (Supabase egress, 15/10).
+    const t = setInterval(() => {
+      if (!document.hidden) cargar();
+    }, 60000);
     return () => clearInterval(t);
   }, []);
 
@@ -977,10 +980,18 @@ function PorConfirmar({ recarga, irARevisar }: { recarga: number; irARevisar: ()
         })
         .catch(() => vivo && setError("No se pudo cargar la lista"));
     cargar();
-    const t = setInterval(cargar, 60000);
+    // A tab nobody is looking at does not ask: this one downloads a few
+    // hundred KB per call (Supabase egress, 15/10). It refreshes at once
+    // when the tab comes back.
+    const alVolver = () => {
+      if (!document.hidden) cargar();
+    };
+    const t = setInterval(alVolver, 120000);
+    document.addEventListener('visibilitychange', alVolver);
     return () => {
       vivo = false;
       clearInterval(t);
+      document.removeEventListener('visibilitychange', alVolver);
     };
   }, [recarga]);
 
@@ -1188,7 +1199,9 @@ export default function AuditoriaPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     cargar();
     // The agent works every ~30 s; the queue refreshes at the same pace.
-    const t = setInterval(cargar, 20000);
+    const t = setInterval(() => {
+      if (!document.hidden) cargar();
+    }, 20000);
     return () => clearInterval(t);
   }, [cargar]);
 

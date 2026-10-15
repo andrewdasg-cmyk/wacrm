@@ -66,6 +66,14 @@ const ultimos10 = (t?: string) => (t ?? '').replace(/\D/g, '').slice(-10)
 // Dropi's dates are Bogotá time without a zone.
 const fechaDropi = (f?: string) => (f ? new Date(`${f.replace(' ', 'T')}-05:00`) : null)
 
+/**
+ * The Dropi mirror is 450 KB+ and the page asks every minute: Supabase's egress
+ * quota ran out (15/10). The mirror only changes when the agent syncs (every
+ * ~10 min), so it is downloaded again only when its `version` changed; the
+ * filtered orders are kept in memory meanwhile.
+ */
+let espejo: { version: number; pedidos: [string, RegistroDropi][] } | null = null
+
 export async function GET() {
   let ctx
   try {
@@ -75,16 +83,28 @@ export async function GET() {
   }
   const db = supabaseAdmin()
 
-  const { data: archivo, error } = await db
+  const { data: version, error: errorVersion } = await db
     .from('agente_archivos')
-    .select('contenido')
+    .select('version')
     .eq('ruta', 'data/estado-actual.json')
     .maybeSingle()
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  const estado = (archivo?.contenido ?? {}) as Record<string, RegistroDropi>
-  const pedidos = Object.entries(estado).filter(
-    ([, r]) => r.lista === 'Por confirmar' && !r.ausente && ultimos10(r.telefono).length === 10,
-  )
+  if (errorVersion) return NextResponse.json({ error: errorVersion.message }, { status: 500 })
+  let pedidos: [string, RegistroDropi][]
+  if (espejo && version && espejo.version === version.version) {
+    pedidos = espejo.pedidos
+  } else {
+    const { data: archivo, error } = await db
+      .from('agente_archivos')
+      .select('contenido, version')
+      .eq('ruta', 'data/estado-actual.json')
+      .maybeSingle()
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    const estado = (archivo?.contenido ?? {}) as Record<string, RegistroDropi>
+    pedidos = Object.entries(estado).filter(
+      ([, r]) => r.lista === 'Por confirmar' && !r.ausente && ultimos10(r.telefono).length === 10,
+    )
+    if (archivo) espejo = { version: Number(archivo.version), pedidos }
+  }
   if (!pedidos.length) return NextResponse.json({ pedidos: [] })
   const ids = pedidos.map(([p]) => p)
   const telefonos = [...new Set(pedidos.map(([, r]) => ultimos10(r.telefono)))]
