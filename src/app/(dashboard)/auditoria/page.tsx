@@ -578,6 +578,9 @@ function Tarjeta({ caso, alCambiar }: { caso: Caso; alCambiar: () => void }) {
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
             {caso.plantilla_meta ? `Plantilla ${caso.plantilla_meta}` : "Mensaje que saldría"}
           </p>
+          {caso.tipo === "primer_contacto" && ctx.linea === "entrante" && ctx.medio ? (
+            <p className="text-xs text-muted-foreground">Antes del mensaje sale {String(ctx.medio)}.</p>
+          ) : null}
           {caso.mensaje_propuesto && conBotones ? (
             // What the customer gets: the agent sends the numbered menu as
             // WhatsApp buttons (lib/agente/botones.ts).
